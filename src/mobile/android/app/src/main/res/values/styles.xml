@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.AniTAG.Fullscreen" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#0B0B0E</item>
+        <item name="android:colorBackground">#0B0B0E</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

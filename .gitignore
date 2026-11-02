@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Android build outputs & caches
+build-apk/
+src/mobile/android/.gradle/
+src/mobile/android/app/build/
+src/mobile/android/build/
+*.keystore
+
+# Desktop / Electron outputs
+dist-windows/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db

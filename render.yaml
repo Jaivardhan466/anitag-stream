@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: anitag-stream
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.x
+      - key: PORT
+        value: 10000

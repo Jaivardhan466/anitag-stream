@@ -1,0 +1,51 @@
+{
+  "name": "anitag-stream",
+  "version": "3.0.0",
+  "description": "Production-ready Cross-Platform Streaming App (Windows + Android) powered by CloudStream and almost anitag UI",
+  "main": "src/desktop/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/engine/server.js",
+    "dev:engine": "node src/engine/server.js",
+    "dev:desktop": "concurrently \"node src/engine/server.js\" \"wait-on http://localhost:4000 && electron .\"",
+    "build:windows": "electron-builder --win",
+    "build:android": "cd src/mobile/android && ./gradlew assembleRelease",
+    "test:health": "node -e \"fetch('http://localhost:4000/healthz').then(r=>r.json()).then(console.log)\""
+  },
+  "keywords": [
+    "anime",
+    "streaming",
+    "cloudstream",
+    "anitag",
+    "windows",
+    "android",
+    "cross-platform",
+    "google-sync",
+    "hls"
+  ],
+  "author": "AniTAG Architecture Team",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.anitag.stream",
+    "productName": "AniTAG",
+    "directories": {
+      "output": "dist-windows"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/client/icon-512.png"
+    }
+  }
+}
