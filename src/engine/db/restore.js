@@ -75,8 +75,8 @@ export function readAndValidateBackupFile(filePath, encryptionKey) {
 export async function executeRestore(options = {}) {
   const backupFilePath = options.filePath;
   const encryptionKey = options.encryptionKey || process.env.BACKUP_ENCRYPTION_KEY;
-  const targetUrl = options.targetUrl || process.env.TARGET_SUPABASE_URL || process.env.SUPABASE_URL;
-  const targetKey = options.targetKey || process.env.TARGET_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const targetUrl = options.targetUrl || process.env.TARGET_SUPABASE_URL;
+  const targetKey = options.targetKey || process.env.TARGET_SERVICE_ROLE_KEY;
   const isConfirmed = options.confirm === true;
   const fetchFn = options.fetchFn || fetch;
   const batchSize = options.batchSize || 100;
@@ -108,7 +108,7 @@ export async function executeRestore(options = {}) {
 
   if (!isConfirmed) {
     console.log('[Restore Dry Run] Verification completed successfully.');
-    console.log('[Restore Dry Run] To execute live writes to the database, rerun with --confirm.');
+    console.log('[Restore Dry Run] To execute live writes to an isolated test database, rerun with --confirm.');
     return {
       dryRun: true,
       verified: true,
@@ -116,9 +116,13 @@ export async function executeRestore(options = {}) {
     };
   }
 
-  // 2. Live writes require target URL and Service Key
+  // 2. Live writes require target test URL and Service Key, and strictly forbid production URL
   if (!targetUrl || !targetKey) {
-    throw new Error('Live restore aborted: Missing TARGET_SUPABASE_URL or TARGET_SERVICE_ROLE_KEY.');
+    throw new Error('Live restore aborted: Missing TARGET_SUPABASE_URL or TARGET_SERVICE_ROLE_KEY. Restoration is permitted on isolated test databases only.');
+  }
+
+  if (process.env.SUPABASE_URL && targetUrl.trim() === process.env.SUPABASE_URL.trim()) {
+    throw new Error('Safety Violation: TARGET_SUPABASE_URL matches production SUPABASE_URL. Direct restoration into production is strictly blocked.');
   }
 
   console.log(`[Restore Live] Starting live database restoration to: ${targetUrl}...`);

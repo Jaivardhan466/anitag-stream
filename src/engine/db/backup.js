@@ -27,6 +27,17 @@ export const REQUIRED_TABLES = [
   'user_episode_ratings'
 ];
 
+// Primary key mapping per table for deterministic order by during pagination
+export const TABLE_PRIMARY_KEYS = {
+  profiles: 'id',
+  user_preferences: 'user_id',
+  continue_watching: 'id',
+  watch_history: 'id',
+  user_watchlist: 'id',
+  user_anime_ratings: 'id',
+  user_episode_ratings: 'id'
+};
+
 export const BACKUP_VERSION = '1.1.0';
 export const DEFAULT_PAGE_SIZE = 500;
 
@@ -97,7 +108,8 @@ export async function fetchAllRowsForTable(supabaseUrl, serviceRoleKey, table, o
 
   while (hasMore) {
     // Deterministic ordering by primary key / unique column ensures pagination consistency
-    const endpoint = `${supabaseUrl}/rest/v1/${table}?select=*&order=id.asc&limit=${pageSize}&offset=${offset}`;
+    const pk = TABLE_PRIMARY_KEYS[table] || 'id';
+    const endpoint = `${supabaseUrl}/rest/v1/${table}?select=*&order=${pk}.asc&limit=${pageSize}&offset=${offset}`;
     
     let res;
     try {

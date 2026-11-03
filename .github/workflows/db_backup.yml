@@ -15,11 +15,12 @@ name: Supabase Scheduled Backup & Keep-Alive
 #
 # 3. SUPABASE FREE-TIER INACTIVITY POLICY:
 #    Supabase free-tier projects pause after 7 consecutive days of inactivity.
-#    To register genuine database activity, this job executes an authenticated PostgREST
-#    query with the API key against PostgreSQL. Note: While this resets the inactivity
-#    timer during regular workflow runs, automated cron jobs should be complemented
-#    by project dashboard monitoring. For guaranteed zero-pause uptime without inactivity
-#    rules, Supabase Pro or dedicated PostgreSQL hosting is the production standard.
+#    To exercise the database, this job issues an authenticated PostgREST query with
+#    the service key against PostgreSQL. NOTE: Whether an automated HTTP query
+#    genuinely prevents automated project pausing under all conditions is UNVERIFIED
+#    and subject to Supabase platform changes. NEVER rely on this ping alone for
+#    critical production data. Direct project monitoring via the Supabase dashboard
+#    remains mandatory.
 # =============================================================================
 
 on:
@@ -46,28 +47,28 @@ jobs:
         with:
           node-version: '20'
 
-      # Step 1: Authenticated Keep-Alive Query to PostgreSQL
-      - name: Supabase Authenticated Activity Query
+      # Step 1: Authenticated Diagnostic Query to PostgreSQL
+      - name: Supabase Diagnostic Health Query (Unverified Inactivity Reset)
         if: env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != ''
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          echo "[Keep-Alive] Dispatching authenticated query to Supabase PostgREST..."
+          echo "[Diagnostic Query] Dispatching authenticated query to Supabase PostgREST..."
           # Querying public.profiles with service role key forces a PostgreSQL transaction
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
             "$SUPABASE_URL/rest/v1/profiles?select=count" || echo "000")
           
-          echo "[Keep-Alive] Supabase API responded with HTTP status: $HTTP_STATUS"
+          echo "[Diagnostic Query] Supabase API responded with HTTP status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-            echo "[Keep-Alive] Success: Authenticated query executed against PostgreSQL."
+            echo "[Diagnostic Query] Status OK: Authenticated query reached PostgreSQL."
           else
-            echo "[Keep-Alive Warning] Query returned HTTP $HTTP_STATUS. Project may be unreachable or credentials unconfigured."
+            echo "[Diagnostic Query Warning] Query returned HTTP $HTTP_STATUS. Project may be unreachable or credentials unconfigured."
           fi
 
-      # Step 2: Full Database Export with AES-256-GCM Encryption
+      # Step 2: Full Database Export with AES-256-GCM Encryption (Fails workflow on any error)
       - name: Execute Encrypted Backup
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -75,10 +76,12 @@ jobs:
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
         run: |
           # Node script handles pagination, SHA-256 checksums, AES-256-GCM encryption, and manifest generation
+          # Any table export failure or missing credentials causes process.exit(1), failing the step immediately
           node src/engine/db/backup.js
 
-      # Step 3: Archive Encrypted Artifacts Only (No plaintext data)
+      # Step 3: Archive Encrypted Artifacts Only (Fails if backup artifact is missing or incomplete)
       - name: Upload Encrypted Backup Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: anitag-encrypted-database-backup
