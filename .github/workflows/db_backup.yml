@@ -1,10 +1,38 @@
 name: Supabase Scheduled Backup & Keep-Alive
 
+# =============================================================================
+# IMPORTANT GITHUB ACTIONS & SUPABASE OPERATIONAL SPECIFICATIONS:
+# 1. SCHEDULED EXECUTION CONSTRAINT:
+#    GitHub Actions scheduled workflows ('cron') ONLY execute from the repository's
+#    default branch (e.g. 'main'). Scheduled triggers DO NOT run on feature branches
+#    such as 'phase1-core-improvements'. Prior to merging to main, run backups locally
+#    via 'npm run db:backup' or manually in GitHub via 'workflow_dispatch'.
+#
+# 2. APPLICATION-LEVEL AES-256-GCM ENCRYPTION:
+#    All database snapshots are encrypted at the application layer with a 256-bit
+#    symmetric key (derived via PBKDF2-SHA256 with 100,000 iterations). Plaintext
+#    JSON is never stored in artifacts or committed to git.
+#
+# 3. SUPABASE FREE-TIER INACTIVITY POLICY:
+#    Supabase free-tier projects pause after 7 consecutive days of inactivity.
+#    To register genuine database activity, this job executes an authenticated PostgREST
+#    query with the API key against PostgreSQL. Note: While this resets the inactivity
+#    timer during regular workflow runs, automated cron jobs should be complemented
+#    by project dashboard monitoring. For guaranteed zero-pause uptime without inactivity
+#    rules, Supabase Pro or dedicated PostgreSQL hosting is the production standard.
+# =============================================================================
+
 on:
   schedule:
-    # Runs daily at 03:00 UTC (every 24 hours)
+    # Runs daily at 03:00 UTC (Only activates once merged to default branch)
     - cron: '0 3 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Perform a dry-run check without permanent archival'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   backup-and-keepalive:
@@ -18,26 +46,44 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Supabase Keep-Alive Health Ping
-        if: env.SUPABASE_URL != '' && env.SUPABASE_ANON_KEY != ''
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: |
-          echo "Executing keep-alive health ping to prevent 7-day inactivity pause..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY" "$SUPABASE_URL/rest/v1/profiles?select=count" || echo "failed")
-          echo "Keep-alive response status: $STATUS"
-
-      - name: Execute Backup Utility
+      # Step 1: Authenticated Keep-Alive Query to PostgreSQL
+      - name: Supabase Authenticated Activity Query
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != ''
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
+          echo "[Keep-Alive] Dispatching authenticated query to Supabase PostgREST..."
+          # Querying public.profiles with service role key forces a PostgreSQL transaction
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            "$SUPABASE_URL/rest/v1/profiles?select=count" || echo "000")
+          
+          echo "[Keep-Alive] Supabase API responded with HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "[Keep-Alive] Success: Authenticated query executed against PostgreSQL."
+          else
+            echo "[Keep-Alive Warning] Query returned HTTP $HTTP_STATUS. Project may be unreachable or credentials unconfigured."
+          fi
+
+      # Step 2: Full Database Export with AES-256-GCM Encryption
+      - name: Execute Encrypted Backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          # Node script handles pagination, SHA-256 checksums, AES-256-GCM encryption, and manifest generation
           node src/engine/db/backup.js
 
-      - name: Upload Backup Artifacts
+      # Step 3: Archive Encrypted Artifacts Only (No plaintext data)
+      - name: Upload Encrypted Backup Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: anitag-database-backup
-          path: backups/
+          name: anitag-encrypted-database-backup
+          path: |
+            backups/*.enc
+            backups/*.manifest.json
           retention-days: 30
+          if-no-files-found: error

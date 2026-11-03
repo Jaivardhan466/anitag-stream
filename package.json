@@ -11,6 +11,7 @@
     "build:windows": "electron-builder --win",
     "build:android": "cd src/mobile/android && ./gradlew assembleRelease",
     "db:backup": "node src/engine/db/backup.js",
+    "db:restore": "node src/engine/db/restore.js",
     "test:health": "node -e \"fetch('http://localhost:4000/healthz').then(r=>r.json()).then(console.log)\""
   },
   "keywords": [
