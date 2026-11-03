@@ -825,7 +825,6 @@
             sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
             referrerpolicy="origin"
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-            allowfullscreen
           ></iframe>
 
           <!-- Hidden fallback canvas (never blocks video stream) -->
@@ -2821,22 +2820,21 @@
         // 3. Query integrated Anivexa backend (/episodes/anikoto/:id) using environment-aware API URL
         try {
           const avRes = await fetch(`${getApiBaseUrl()}/episodes/anikoto/${anilistId}?map=false`);
-            if (avRes.ok) {
-              const avJson = await avRes.json();
-              const provData = (avJson && (avJson.anikoto || avJson.animegg || avJson.mkissa || avJson.anibd || avJson['2dhive'] || avJson.data)) || {};
-              const subEps = (provData.episodes && provData.episodes.sub) || provData.sub || [];
-              subEps.forEach(item => {
-                const epNum = parseInt(item.number, 10);
-                if (epNum > 0) {
-                  storeEpisodeInCache(cacheKey, epNum, item.title || '', item.image || item.thumbnail || '');
-                }
-              });
-              if (state.playerOpen && state.activeAnime && state.activeAnime.id === anime.id) {
-                renderPlayerEpisodes(document.getElementById('episodeFilterInput').value, true);
+          if (avRes.ok) {
+            const avJson = await avRes.json();
+            const provData = (avJson && (avJson.anikoto || avJson.animegg || avJson.mkissa || avJson.anibd || avJson['2dhive'] || avJson.data)) || {};
+            const subEps = (provData.episodes && provData.episodes.sub) || provData.sub || [];
+            subEps.forEach(item => {
+              const epNum = parseInt(item.number, 10);
+              if (epNum > 0) {
+                storeEpisodeInCache(cacheKey, epNum, item.title || '', item.image || item.thumbnail || '');
               }
+            });
+            if (state.playerOpen && state.activeAnime && state.activeAnime.id === anime.id) {
+              renderPlayerEpisodes(document.getElementById('episodeFilterInput').value, true);
             }
-          } catch (e) {}
-        }
+          }
+        } catch (e) {}
       }
     }
 
@@ -4633,9 +4631,8 @@
             });
           }
         } catch (e) {}
-      }
 
-      if (myToken !== currentLoadToken) return;
+        if (myToken !== currentLoadToken) return;
 
       // Deduplicate and build activeStreamQueue:
       // 1. Real direct HLS/MP4 streams from backend (if any)
