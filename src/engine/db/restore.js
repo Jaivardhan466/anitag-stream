@@ -18,12 +18,14 @@
  *     5. Every table in REQUIRED_TABLES must exist in data AND manifest.tables with status "OK".
  *     6. Every table row_count in manifest must match actual array length.
  *     7. Every table must have a valid 64-char hex SHA-256 checksum matching computed data.
- * - Production Overwrite Guard:
+ * - Production Overwrite & Target Safety Guards:
  *     1. Never allow live restore if production identity cannot be verified (SUPABASE_URL required).
- *     2. Normalized URL comparison strips trailing slashes, paths, and casing to prevent bypasses.
- *     3. Live restore is hard-disabled unless ALLOW_ISOLATED_TEST_RESTORE=true is set.
- *     4. Target URL must be verified as an isolated test target (e.g. test, staging, mock, localhost).
- *     5. Default operation is always read-only DRY-RUN.
+ *     2. Reject any target matching production SUPABASE_URL after safe URL normalization.
+ *     3. Require an exact, explicitly configured RESTORE_ALLOWED_TARGET_URL allowlist.
+ *     4. TARGET_SUPABASE_URL must match RESTORE_ALLOWED_TARGET_URL after safe URL normalization.
+ *     5. Hostname keyword-based heuristics are strictly removed; explicit allowlisting is required.
+ *     6. Live restore is disabled by default unless ALLOW_ISOLATED_TEST_RESTORE=true is set.
+ *     7. Default operation is always read-only DRY-RUN.
  */
 
 import fs from 'node:fs';
@@ -37,27 +39,18 @@ const __dirname = path.dirname(__filename);
 export const SUPPORTED_SCHEMA_VERSIONS = ['1.1.0'];
 
 /**
- * Normalizes a URL to origin without trailing slashes or case differences
+ * Normalizes a URL to lowercase protocol and host with path stripped of trailing slashes
  */
 export function normalizeUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return '';
   const trimmed = rawUrl.trim();
   try {
     const parsed = new URL(trimmed);
-    return parsed.origin.toLowerCase();
+    const pathname = parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.protocol}//${parsed.host}${pathname}`.toLowerCase();
   } catch {
     return trimmed.toLowerCase().replace(/\/+$/, '');
   }
-}
-
-/**
- * Checks whether a target URL qualifies as a verified isolated test target
- */
-export function isVerifiedIsolatedTestTarget(url) {
-  if (!url) return false;
-  const normalized = normalizeUrl(url);
-  const testKeywords = ['test', 'staging', 'mock', 'localhost', '127.0.0.1'];
-  return testKeywords.some(kw => normalized.includes(kw));
 }
 
 /**
@@ -210,29 +203,34 @@ export async function executeRestore(options = {}) {
   }
 
   // 2. Strict Live Restoration Safety Controls (Never Write to Production)
-  const prodUrl = process.env.SUPABASE_URL;
+  const prodUrl = options.supabaseUrl || process.env.SUPABASE_URL;
   if (!prodUrl || !prodUrl.trim()) {
     throw new Error('Safety Block: Production identity cannot be verified because SUPABASE_URL is not set in environment. Live restore is aborted to prevent accidental writes to an unverified production instance.');
+  }
+
+  const allowedTargetUrl = options.allowedTargetUrl || process.env.RESTORE_ALLOWED_TARGET_URL;
+  if (!allowedTargetUrl || !allowedTargetUrl.trim()) {
+    throw new Error('Safety Block: Live restore is blocked because RESTORE_ALLOWED_TARGET_URL is not configured. An exact allowlisted target URL is mandatory.');
   }
 
   if (!targetUrl || !targetKey) {
     throw new Error('Live restore aborted: Missing TARGET_SUPABASE_URL or TARGET_SERVICE_ROLE_KEY. Restoration is permitted on isolated test databases only.');
   }
 
-  // Normalized URL comparison (strips trailing slashes, casing, etc.)
+  // Reject any target matching production project identity (after URL normalization)
   if (normalizeUrl(targetUrl) === normalizeUrl(prodUrl)) {
     throw new Error(`Safety Violation: TARGET_SUPABASE_URL (${normalizeUrl(targetUrl)}) matches production SUPABASE_URL (${normalizeUrl(prodUrl)}). Direct restoration into production is strictly blocked.`);
   }
 
-  // Explicit isolated test environment flag required
+  // Target must exactly match the allowlisted URL after safe URL normalization
+  if (normalizeUrl(targetUrl) !== normalizeUrl(allowedTargetUrl)) {
+    throw new Error(`Safety Block: TARGET_SUPABASE_URL (${normalizeUrl(targetUrl)}) does not match the configured allowlist RESTORE_ALLOWED_TARGET_URL (${normalizeUrl(allowedTargetUrl)}). Live restore is rejected.`);
+  }
+
+  // Explicit isolated test environment flag required as defense-in-depth
   const allowIsolatedTest = process.env.ALLOW_ISOLATED_TEST_RESTORE === 'true' || options.allowTestRestore === true;
   if (!allowIsolatedTest) {
     throw new Error('Safety Block: Live restore is disabled by default. To execute writes against an isolated test database, you must explicitly set ALLOW_ISOLATED_TEST_RESTORE=true in the environment.');
-  }
-
-  // Verify that the target URL represents an isolated test environment
-  if (!isVerifiedIsolatedTestTarget(targetUrl) && !options.isVerifiedTestTarget) {
-    throw new Error(`Safety Block: Target URL '${targetUrl}' is not recognized as an isolated test target. Live restore is restricted to verified non-production test targets only.`);
   }
 
   console.log(`[Restore Live] Starting live database restoration to isolated test target: ${normalizeUrl(targetUrl)}...`);

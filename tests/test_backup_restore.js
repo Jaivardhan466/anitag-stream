@@ -7,13 +7,17 @@
  * 3. Failed table export (Partial failure marks entire backup FAILED, zero partial success)
  * 4. Pagination with more rows than one API response (Multi-page cursor traversal)
  * 5. Encryption and decryption (AES-256-GCM, PBKDF2 key derivation, bit tamper detection)
- * 6. Valid dry-run restoration (Read-only validation, zero network mutations)
- * 7. Restore production safety guards:
+ * 6. Restore dry-run & default operation guards:
+ *    - 6A: Valid dry-run succeeds with manifest verification and zero network writes
+ *    - 6B: Default operation without --confirm is strictly dry-run
+ * 7. Restore production safety & exact allowlist guards:
  *    - 7A: Missing SUPABASE_URL during live restore (blocked: unverified production identity)
- *    - 7B: Production URL with trailing slash (blocked by normalized URL comparison)
- *    - 7C: Live restore blocked without explicit isolated-target verification (ALLOW_ISOLATED_TEST_RESTORE=true)
- *    - 7D: Live restore blocked if target URL is not recognized as an isolated test target
- *    - 7E: Verified isolated test target restore succeeds
+ *    - 7B: Missing RESTORE_ALLOWED_TARGET_URL during live restore (blocked: allowlist required)
+ *    - 7C: Production URL match rejected (TARGET_SUPABASE_URL === SUPABASE_URL blocked)
+ *    - 7D: Trailing slash & casing URL normalization verified on both production and target URLs
+ *    - 7E: Different hostname rejected (even with 'test' keyword, non-allowlisted host is blocked)
+ *    - 7F: Live restore blocked without explicit opt-in flag (ALLOW_ISOLATED_TEST_RESTORE=true)
+ *    - 7G: Exact allowlist match succeeds
  * 8. Strict manifest validation:
  *    - 8A: Invalid manifest status (status !== 'SUCCESS')
  *    - 8B: Unexpected schema version (schema_version !== '1.1.0')
@@ -43,7 +47,6 @@ import {
   readAndValidateBackupFile,
   executeRestore,
   normalizeUrl,
-  isVerifiedIsolatedTestTarget,
   SUPPORTED_SCHEMA_VERSIONS
 } from '../src/engine/db/restore.js';
 
@@ -360,12 +363,13 @@ async function runAllTests() {
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 6: VALID DRY-RUN RESTORATION
+  // TEST 6: RESTORE DRY-RUN & DEFAULT OPERATION GUARDS
   // ---------------------------------------------------------------------------
   try {
-    console.log('[TEST 6] Valid Dry-Run Restoration Verification...');
+    console.log('[TEST 6] Restore Dry-Run & Default Operation Guards...');
     assert(validBackupPath && fs.existsSync(validBackupPath), 'Valid backup artifact must exist');
 
+    // 6A: Explicit dry-run (confirm: false)
     const dryRunResult = await executeRestore({
       filePath: validBackupPath,
       encryptionKey: TEST_PASSPHRASE,
@@ -377,7 +381,16 @@ async function runAllTests() {
     assert.strictEqual(dryRunResult.manifest.total_rows, 7);
     assert.strictEqual(dryRunResult.manifest.status, 'SUCCESS');
 
-    console.log('  -> PASS: Valid dry-run succeeded with full manifest verification and zero network writes.\n');
+    // 6B: Default operation without confirm flag remains dry-run
+    const defaultResult = await executeRestore({
+      filePath: validBackupPath,
+      encryptionKey: TEST_PASSPHRASE
+      // confirm is omitted
+    });
+    assert.strictEqual(defaultResult.dryRun, true, 'Default execution without --confirm must remain dry-run');
+    assert.strictEqual(defaultResult.verified, true, 'Default execution must perform verification');
+
+    console.log('  -> PASS: Valid dry-run and default non-destructive operation verified.\n');
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 6:', err);
@@ -385,19 +398,24 @@ async function runAllTests() {
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 7: RESTORE PRODUCTION SAFETY GUARDS
+  // TEST 7: RESTORE TARGET SECURITY & EXACT ALLOWLIST GUARDS
   // ---------------------------------------------------------------------------
   try {
-    console.log('[TEST 7] Restore Production Safety Guards Verification...');
+    console.log('[TEST 7] Restore Target Security & Exact Allowlist Guards...');
 
-    // 7A: Missing SUPABASE_URL during live restore (cannot verify production identity)
+    const PROD_URL = 'https://prod-project.supabase.co';
+    const ALLOWED_TEST_URL = 'https://isolated-staging.supabase.co';
+
+    // 7A: Missing production identity: SUPABASE_URL not set
     delete process.env.SUPABASE_URL;
+    process.env.RESTORE_ALLOWED_TARGET_URL = ALLOWED_TEST_URL;
+    process.env.ALLOW_ISOLATED_TEST_RESTORE = 'true';
     let missingProdThrown = false;
     try {
       await executeRestore({
         filePath: validBackupPath,
         encryptionKey: TEST_PASSPHRASE,
-        targetUrl: 'https://test-isolated.supabase.co',
+        targetUrl: ALLOWED_TEST_URL,
         targetKey: 'test-key',
         confirm: true
       });
@@ -405,60 +423,95 @@ async function runAllTests() {
       missingProdThrown = true;
       assert(err.message.includes('Production identity cannot be verified because SUPABASE_URL is not set'));
     }
-    assert(missingProdThrown, 'Live restore must be blocked if SUPABASE_URL is not set in environment');
+    assert(missingProdThrown, 'Live restore must be blocked if SUPABASE_URL is missing');
 
-    // 7B: Production URL with trailing slash (normalized comparison test)
-    process.env.SUPABASE_URL = 'https://prod.supabase.co';
-    let trailingSlashBlocked = false;
+    // 7B: Missing allowlist: RESTORE_ALLOWED_TARGET_URL not set
+    process.env.SUPABASE_URL = PROD_URL;
+    delete process.env.RESTORE_ALLOWED_TARGET_URL;
+    let missingAllowlistThrown = false;
     try {
       await executeRestore({
         filePath: validBackupPath,
         encryptionKey: TEST_PASSPHRASE,
-        targetUrl: 'https://prod.supabase.co/', // Trailing slash variation!
+        targetUrl: ALLOWED_TEST_URL,
         targetKey: 'test-key',
         confirm: true
       });
     } catch (err) {
-      trailingSlashBlocked = true;
+      missingAllowlistThrown = true;
+      assert(err.message.includes('RESTORE_ALLOWED_TARGET_URL is not configured'));
+    }
+    assert(missingAllowlistThrown, 'Live restore must be blocked if RESTORE_ALLOWED_TARGET_URL is missing');
+
+    // 7C: Production URL match rejected
+    process.env.RESTORE_ALLOWED_TARGET_URL = ALLOWED_TEST_URL;
+    let prodTargetThrown = false;
+    try {
+      await executeRestore({
+        filePath: validBackupPath,
+        encryptionKey: TEST_PASSPHRASE,
+        targetUrl: PROD_URL,
+        targetKey: 'test-key',
+        confirm: true
+      });
+    } catch (err) {
+      prodTargetThrown = true;
       assert(err.message.includes('matches production SUPABASE_URL'));
     }
-    assert(trailingSlashBlocked, 'Must block targetUrl matching production even with trailing slash');
+    assert(prodTargetThrown, 'Target matching production URL must be strictly blocked');
 
-    // 7C: Blocked without explicit isolated-target verification (ALLOW_ISOLATED_TEST_RESTORE=true)
+    // 7D: Trailing slash & casing URL normalization
+    // Target has trailing slash matching production
+    let prodTrailingSlashThrown = false;
+    try {
+      await executeRestore({
+        filePath: validBackupPath,
+        encryptionKey: TEST_PASSPHRASE,
+        targetUrl: `${PROD_URL}/`, // Trailing slash!
+        targetKey: 'test-key',
+        confirm: true
+      });
+    } catch (err) {
+      prodTrailingSlashThrown = true;
+      assert(err.message.includes('matches production SUPABASE_URL'));
+    }
+    assert(prodTrailingSlashThrown, 'Target matching production with trailing slash must be normalized and blocked');
+
+    // 7E: Different hostname (reject non-allowlisted targets, even if host has "test" or "mock")
+    let differentHostnameThrown = false;
+    try {
+      await executeRestore({
+        filePath: validBackupPath,
+        encryptionKey: TEST_PASSPHRASE,
+        targetUrl: 'https://test-unauthorized.supabase.co', // Has 'test' in name, but not in allowlist!
+        targetKey: 'test-key',
+        confirm: true
+      });
+    } catch (err) {
+      differentHostnameThrown = true;
+      assert(err.message.includes('does not match the configured allowlist RESTORE_ALLOWED_TARGET_URL'));
+    }
+    assert(differentHostnameThrown, 'Hostname keyword heuristics must be eliminated; non-allowlisted hosts must be blocked');
+
+    // 7F: Live restore blocked without explicit opt-in flag (ALLOW_ISOLATED_TEST_RESTORE=true)
     delete process.env.ALLOW_ISOLATED_TEST_RESTORE;
-    let unverifiedTargetBlocked = false;
+    let missingOptInThrown = false;
     try {
       await executeRestore({
         filePath: validBackupPath,
         encryptionKey: TEST_PASSPHRASE,
-        targetUrl: 'https://test-isolated.supabase.co',
+        targetUrl: ALLOWED_TEST_URL,
         targetKey: 'test-key',
         confirm: true
       });
     } catch (err) {
-      unverifiedTargetBlocked = true;
-      assert(err.message.includes('Live restore is disabled by default. To execute writes against an isolated test database, you must explicitly set ALLOW_ISOLATED_TEST_RESTORE=true'));
+      missingOptInThrown = true;
+      assert(err.message.includes('ALLOW_ISOLATED_TEST_RESTORE=true'));
     }
-    assert(unverifiedTargetBlocked, 'Live restore must remain blocked without ALLOW_ISOLATED_TEST_RESTORE=true');
+    assert(missingOptInThrown, 'Live restore must remain blocked if ALLOW_ISOLATED_TEST_RESTORE is not true');
 
-    // 7D: Blocked if target URL does not look like an isolated test target
+    // 7G: Exact allowlist match succeeds (including trailing slash & casing normalization)
     process.env.ALLOW_ISOLATED_TEST_RESTORE = 'true';
-    let nonTestTargetBlocked = false;
-    try {
-      await executeRestore({
-        filePath: validBackupPath,
-        encryptionKey: TEST_PASSPHRASE,
-        targetUrl: 'https://custom-domain-anitag.com', // Not a test domain!
-        targetKey: 'test-key',
-        confirm: true
-      });
-    } catch (err) {
-      nonTestTargetBlocked = true;
-      assert(err.message.includes('is not recognized as an isolated test target'));
-    }
-    assert(nonTestTargetBlocked, 'Live restore must be blocked if target URL is not a recognized test environment');
-
-    // 7E: Verified isolated test target restore succeeds
     const mockTargetRows = {};
     const mockTargetFetch = async (url, options) => {
       const tableName = new URL(url).pathname.split('/').pop();
@@ -468,16 +521,17 @@ async function runAllTests() {
       return { ok: true, status: 201, text: async () => 'OK' };
     };
 
+    // Pass uppercase protocol and trailing slash in targetUrl; normalizeUrl normalizes and matches allowlist!
     const validRestoreResult = await executeRestore({
       filePath: validBackupPath,
       encryptionKey: TEST_PASSPHRASE,
-      targetUrl: 'https://test-isolated.supabase.co',
+      targetUrl: 'HTTPS://ISOLATED-STAGING.SUPABASE.CO/',
       targetKey: 'test-isolated-key',
       confirm: true,
       fetchFn: mockTargetFetch
     });
 
-    assert(validRestoreResult.success, 'Restore must report success for verified isolated target');
+    assert(validRestoreResult.success, 'Restore must report success for exact allowlisted target');
     for (const t of REQUIRED_TABLES) {
       assert(mockTargetRows[t], `Target database must receive rows for '${t}'`);
       assert.strictEqual(mockTargetRows[t].length, 1);
@@ -485,9 +539,10 @@ async function runAllTests() {
 
     // Clean up environment variables
     delete process.env.SUPABASE_URL;
+    delete process.env.RESTORE_ALLOWED_TARGET_URL;
     delete process.env.ALLOW_ISOLATED_TEST_RESTORE;
 
-    console.log('  -> PASS: All production safety guards enforced; unverified targets blocked; verified test target succeeded.\n');
+    console.log('  -> PASS: All target security guards verified: missing identity, missing allowlist, prod match, normalization, different host, and exact allowlist match.\n');
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 7:', err);

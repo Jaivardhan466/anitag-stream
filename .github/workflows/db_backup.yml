@@ -1,4 +1,4 @@
-name: Supabase Scheduled Backup & Keep-Alive
+name: Supabase Scheduled Backup & Health Check
 
 # =============================================================================
 # IMPORTANT GITHUB ACTIONS & SUPABASE OPERATIONAL SPECIFICATIONS:
@@ -13,14 +13,12 @@ name: Supabase Scheduled Backup & Keep-Alive
 #    symmetric key (derived via PBKDF2-SHA256 with 100,000 iterations). Plaintext
 #    JSON is never stored in artifacts or committed to git.
 #
-# 3. SUPABASE FREE-TIER INACTIVITY POLICY:
-#    Supabase free-tier projects pause after 7 consecutive days of inactivity.
-#    To exercise the database, this job issues an authenticated PostgREST query with
-#    the service key against PostgreSQL. NOTE: Whether an automated HTTP query
-#    genuinely prevents automated project pausing under all conditions is UNVERIFIED
-#    and subject to Supabase platform changes. NEVER rely on this ping alone for
-#    critical production data. Direct project monitoring via the Supabase dashboard
-#    remains mandatory.
+# 3. SUPABASE BEST-EFFORT HEALTH CHECK:
+#    This workflow executes a best-effort diagnostic health check query against the
+#    Supabase PostgREST endpoint to confirm connectivity and responsiveness.
+#    Failed checks are reported honestly in the log. This request is strictly a
+#    health diagnostic and does not claim to prevent Supabase inactivity pausing.
+#    Direct project monitoring via the Supabase dashboard remains necessary.
 # =============================================================================
 
 on:
@@ -36,7 +34,7 @@ on:
         type: boolean
 
 jobs:
-  backup-and-keepalive:
+  backup-and-healthcheck:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -47,25 +45,24 @@ jobs:
         with:
           node-version: '20'
 
-      # Step 1: Authenticated Diagnostic Query to PostgreSQL
-      - name: Supabase Diagnostic Health Query (Unverified Inactivity Reset)
+      # Step 1: Authenticated Best-Effort Health Query
+      - name: Authenticated Supabase Best-Effort Health Check
         if: env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != ''
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          echo "[Diagnostic Query] Dispatching authenticated query to Supabase PostgREST..."
-          # Querying public.profiles with service role key forces a PostgreSQL transaction
+          echo "[Health Check] Dispatching authenticated health query to Supabase PostgREST..."
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
             "$SUPABASE_URL/rest/v1/profiles?select=count" || echo "000")
           
-          echo "[Diagnostic Query] Supabase API responded with HTTP status: $HTTP_STATUS"
+          echo "[Health Check] Supabase API responded with HTTP status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-            echo "[Diagnostic Query] Status OK: Authenticated query reached PostgreSQL."
+            echo "[Health Check] Status OK: Database responded successfully to health check."
           else
-            echo "[Diagnostic Query Warning] Query returned HTTP $HTTP_STATUS. Project may be unreachable or credentials unconfigured."
+            echo "[Health Check Error] Health check failed with HTTP status $HTTP_STATUS. Database may be offline, unreachable, or credentials invalid."
           fi
 
       # Step 2: Full Database Export with AES-256-GCM Encryption (Fails workflow on any error)
