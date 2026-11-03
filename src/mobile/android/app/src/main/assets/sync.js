@@ -17,6 +17,25 @@ class AniTagSyncEngine {
     this.isSyncing = false;
     this.lastSentTimestamp = 0;
     this.ignoreNextSync = false;
+    this.reconnectTimer = null;
+    this.isUnloading = false;
+
+    if (typeof window !== 'undefined') {
+      const handleUnload = () => {
+        this.isUnloading = true;
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+          try {
+            this.ws.close(1000, 'Normal Page Unload');
+          } catch (_) {}
+        }
+      };
+      window.addEventListener('beforeunload', handleUnload);
+      window.addEventListener('pagehide', handleUnload);
+    }
 
     this.initAuthIntegration();
     this.initWebSocket();
@@ -93,6 +112,17 @@ class AniTagSyncEngine {
    * Environment-Aware WebSocket Connection
    */
   initWebSocket() {
+    if (this.isUnloading) return;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      return;
+    }
+
     const wsUrl = getWsSyncUrl();
 
     try {
@@ -117,11 +147,13 @@ class AniTagSyncEngine {
 
       this.ws.onclose = () => {
         this.isConnected = false;
-        setTimeout(() => this.initWebSocket(), 4000);
+        if (!this.isUnloading) {
+          this.reconnectTimer = setTimeout(() => this.initWebSocket(), 4000);
+        }
       };
 
       this.ws.onerror = () => {
-        this.ws.close();
+        console.warn('[Sync] WebSocket connection notice (Sync Hub offline or connecting)');
       };
     } catch (e) {
       console.warn('[Sync] WebSocket initialization skipped or unavailable:', e.message);

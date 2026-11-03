@@ -78,25 +78,47 @@ function sendJson(res, statusCode, data) {
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const userRooms = new Map(); // userId -> Set of active client sockets
 
-function encodeWsTextFrame(text) {
-  const payload = Buffer.from(text, "utf8");
-  const len = payload.length;
+function encodeWsFrame(opcode, payload = Buffer.alloc(0)) {
+  const buf = Buffer.isBuffer(payload) ? payload : Buffer.from(payload, "utf8");
+  const len = buf.length;
   let header;
 
   if (len <= 125) {
-    header = Buffer.from([0x81, len]);
+    header = Buffer.from([0x80 | (opcode & 0x0f), len]);
   } else if (len <= 65535) {
     header = Buffer.alloc(4);
-    header[0] = 0x81;
+    header[0] = 0x80 | (opcode & 0x0f);
     header[1] = 126;
     header.writeUInt16BE(len, 2);
   } else {
     header = Buffer.alloc(10);
-    header[0] = 0x81;
+    header[0] = 0x80 | (opcode & 0x0f);
     header[1] = 127;
     header.writeBigUInt64BE(BigInt(len), 2);
   }
-  return Buffer.concat([header, payload]);
+  return Buffer.concat([header, buf]);
+}
+
+function encodeWsTextFrame(text) {
+  return encodeWsFrame(0x01, Buffer.from(text, "utf8"));
+}
+
+function encodeWsCloseFrame(code = 1000, reason = "") {
+  const reasonBuf = Buffer.from(reason, "utf8");
+  const payload = Buffer.alloc(2 + reasonBuf.length);
+  payload.writeUInt16BE(code, 0);
+  if (reasonBuf.length > 0) {
+    reasonBuf.copy(payload, 2);
+  }
+  return encodeWsFrame(0x08, payload);
+}
+
+function encodeWsPongFrame(payload = Buffer.alloc(0)) {
+  return encodeWsFrame(0x0a, payload);
+}
+
+function encodeWsPingFrame(payload = Buffer.alloc(0)) {
+  return encodeWsFrame(0x09, payload);
 }
 
 function handleWsUpgrade(req, socket, head) {
@@ -129,11 +151,115 @@ function handleWsUpgrade(req, socket, head) {
   let authenticatedUser = null;
   let deviceId = null;
   let buffer = Buffer.alloc(0);
+  let fragmentedOpcode = null;
+  let fragmentedBuffers = [];
+  let isClosing = false;
+
+  function cleanupSocket() {
+    if (authenticatedUser && userRooms.has(authenticatedUser)) {
+      const set = userRooms.get(authenticatedUser);
+      set.delete(socket);
+      if (set.size === 0) userRooms.delete(authenticatedUser);
+    }
+  }
+
+  function handleTextMessage(text) {
+    let msg;
+    try {
+      msg = JSON.parse(text);
+    } catch (e) {
+      console.warn("[Sync Hub] WebSocket frame JSON parse error:", e.message);
+      return;
+    }
+
+    if (!msg || typeof msg !== "object") return;
+
+    // 1. Join Room on Google Sign-In
+    if (msg.type === "JOIN_SYNC_ROOM") {
+      authenticatedUser = msg.userId || "guest_default";
+      deviceId = msg.deviceId || "unknown_device";
+
+      if (!userRooms.has(authenticatedUser)) {
+        userRooms.set(authenticatedUser, new Set());
+      }
+      userRooms.get(authenticatedUser).add(socket);
+
+      try {
+        socket.write(encodeWsTextFrame(JSON.stringify({
+          type: "SYNC_ROOM_JOINED",
+          userId: authenticatedUser,
+          deviceId,
+          connectedDevicesCount: userRooms.get(authenticatedUser).size
+        })));
+      } catch (_) {}
+
+      console.log(`[Sync Hub] Device ${deviceId} joined room for user: ${authenticatedUser}`);
+      return;
+    }
+
+    // 2. Instant Playback Command Broadcast ("Like on a keyboard" - < 50ms latency)
+    if (msg.type === "PLAYBACK_SYNC_ACTION") {
+      if (!authenticatedUser) return;
+      const clients = userRooms.get(authenticatedUser);
+      if (!clients) return;
+
+      const broadcastFrame = encodeWsTextFrame(JSON.stringify({
+        type: "RECEIVE_PLAYBACK_SYNC",
+        sourceDevice: deviceId,
+        action: msg.action,
+        animeId: msg.animeId,
+        animeTitle: msg.animeTitle,
+        episode: msg.episode,
+        audio: msg.audio,
+        provider: msg.provider,
+        positionSec: msg.positionSec,
+        durationSec: msg.durationSec,
+        volume: msg.volume,
+        isPlaying: msg.isPlaying,
+        timestamp: Date.now()
+      }));
+
+      for (const client of clients) {
+        if (client !== socket && !client.destroyed) {
+          try {
+            client.write(broadcastFrame);
+          } catch (_) {}
+        }
+      }
+      return;
+    }
+
+    // 3. Cloud Data Sync (Watchlist, History, Preferences)
+    if (msg.type === "CLOUD_DATA_SYNC") {
+      if (!authenticatedUser) return;
+      const clients = userRooms.get(authenticatedUser);
+      if (!clients) return;
+
+      const dataFrame = encodeWsTextFrame(JSON.stringify({
+        type: "RECEIVE_CLOUD_DATA",
+        dataType: msg.dataType,
+        data: msg.data,
+        timestamp: Date.now()
+      }));
+
+      for (const client of clients) {
+        if (client !== socket && !client.destroyed) {
+          try {
+            client.write(dataFrame);
+          } catch (_) {}
+        }
+      }
+    }
+  }
 
   socket.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
 
     while (buffer.length >= 2) {
+      const firstByte = buffer[0];
+      const fin = (firstByte & 0x80) === 0x80;
+      const opcode = firstByte & 0x0f;
+
       const secondByte = buffer[1];
       const isMasked = (secondByte & 0x80) === 0x80;
       let payloadLen = secondByte & 0x7f;
@@ -166,94 +292,81 @@ function handleWsUpgrade(req, socket, head) {
         unmasked[i] = isMasked ? payload[i] ^ maskKey[i % 4] : payload[i];
       }
 
-      try {
-        const msg = JSON.parse(unmasked.toString("utf8"));
-
-        // 1. Join Room on Google Sign-In
-        if (msg.type === "JOIN_SYNC_ROOM") {
-          authenticatedUser = msg.userId || "guest_default";
-          deviceId = msg.deviceId || "unknown_device";
-
-          if (!userRooms.has(authenticatedUser)) {
-            userRooms.set(authenticatedUser, new Set());
-          }
-          userRooms.get(authenticatedUser).add(socket);
-
-          socket.write(encodeWsTextFrame(JSON.stringify({
-            type: "SYNC_ROOM_JOINED",
-            userId: authenticatedUser,
-            deviceId,
-            connectedDevicesCount: userRooms.get(authenticatedUser).size
-          })));
-
-          console.log(`[Sync Hub] Device ${deviceId} joined room for user: ${authenticatedUser}`);
-          continue;
-        }
-
-        // 2. Instant Playback Command Broadcast ("Like on a keyboard" - < 50ms latency)
-        if (msg.type === "PLAYBACK_SYNC_ACTION") {
-          if (!authenticatedUser) continue;
-          const clients = userRooms.get(authenticatedUser);
-          if (!clients) continue;
-
-          const broadcastFrame = encodeWsTextFrame(JSON.stringify({
-            type: "RECEIVE_PLAYBACK_SYNC",
-            sourceDevice: deviceId,
-            action: msg.action,
-            animeId: msg.animeId,
-            animeTitle: msg.animeTitle,
-            episode: msg.episode,
-            audio: msg.audio,
-            provider: msg.provider,
-            positionSec: msg.positionSec,
-            durationSec: msg.durationSec,
-            volume: msg.volume,
-            isPlaying: msg.isPlaying,
-            timestamp: Date.now()
-          }));
-
-          for (const client of clients) {
-            if (client !== socket && !client.destroyed) {
-              client.write(broadcastFrame);
+      // RFC-6455: Handle Connection Close Frame (Opcode 0x8)
+      if (opcode === 0x08) {
+        if (!isClosing) {
+          isClosing = true;
+          let closeCode = 1000;
+          let closeReason = "";
+          if (unmasked.length >= 2) {
+            closeCode = unmasked.readUInt16BE(0);
+            if (unmasked.length > 2) {
+              closeReason = unmasked.subarray(2).toString("utf8");
             }
           }
-          continue;
+          try {
+            socket.write(encodeWsCloseFrame(closeCode, closeReason));
+          } catch (_) {}
         }
-
-        // 3. Cloud Data Sync (Watchlist, History, Preferences)
-        if (msg.type === "CLOUD_DATA_SYNC") {
-          if (!authenticatedUser) continue;
-          const clients = userRooms.get(authenticatedUser);
-          if (!clients) continue;
-
-          const dataFrame = encodeWsTextFrame(JSON.stringify({
-            type: "RECEIVE_CLOUD_DATA",
-            dataType: msg.dataType,
-            data: msg.data,
-            timestamp: Date.now()
-          }));
-
-          for (const client of clients) {
-            if (client !== socket && !client.destroyed) {
-              client.write(dataFrame);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("[Sync Hub] WebSocket frame parse error:", e.message);
+        cleanupSocket();
+        socket.end();
+        return;
       }
+
+      // RFC-6455: Handle Ping Frame (Opcode 0x9) -> Echo Pong Frame (Opcode 0xA)
+      if (opcode === 0x09) {
+        try {
+          socket.write(encodeWsPongFrame(unmasked));
+        } catch (_) {}
+        continue;
+      }
+
+      // RFC-6455: Handle Pong Frame (Opcode 0xA) -> Keepalive Heartbeat response
+      if (opcode === 0x0a) {
+        continue;
+      }
+
+      // RFC-6455: Handle Binary Frame (Opcode 0x2) -> Non-text data
+      if (opcode === 0x02) {
+        continue;
+      }
+
+      // RFC-6455: Handle Text Frame (Opcode 0x1) and Continuation Frames (Opcode 0x0)
+      if (opcode === 0x01 || opcode === 0x00) {
+        if (!fin) {
+          if (opcode === 0x01) {
+            fragmentedOpcode = 0x01;
+            fragmentedBuffers = [unmasked];
+          } else if (fragmentedOpcode !== null) {
+            fragmentedBuffers.push(unmasked);
+          }
+          continue;
+        }
+
+        let fullPayload;
+        if (opcode === 0x00 && fragmentedOpcode !== null) {
+          fragmentedBuffers.push(unmasked);
+          fullPayload = Buffer.concat(fragmentedBuffers);
+          fragmentedOpcode = null;
+          fragmentedBuffers = [];
+        } else {
+          fullPayload = unmasked;
+        }
+
+        handleTextMessage(fullPayload.toString("utf8"));
+        continue;
+      }
+
+      console.warn(`[Sync Hub] Received unhandled WebSocket opcode: 0x${opcode.toString(16)}`);
     }
   });
 
   socket.on("close", () => {
-    if (authenticatedUser && userRooms.has(authenticatedUser)) {
-      const set = userRooms.get(authenticatedUser);
-      set.delete(socket);
-      if (set.size === 0) userRooms.delete(authenticatedUser);
-    }
+    cleanupSocket();
   });
 
   socket.on("error", () => {
+    cleanupSocket();
     socket.destroy();
   });
 }
@@ -329,7 +442,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const handler = PROVIDER_ROUTERS[prov];
           if (!handler) continue;
-          const targetId = anilistId || malId;
+          const targetId = anilistId || malId || animeId;
           const watchPath = `/watch/${prov}/${targetId}/${audio}/${prov}-${ep}`;
           const provReq = new Request(`http://localhost${watchPath}`, { method: "GET" });
 
@@ -392,6 +505,9 @@ const server = http.createServer(async (req, res) => {
     // Static Frontend File Serving
     let filePath = path.join(CLIENT_DIR, pathname === "/" ? "index.html" : pathname);
     if (!fs.existsSync(filePath)) {
+      if (pathname.includes(".") && !pathname.endsWith(".html")) {
+        return sendJson(res, 404, { error: `Asset not found: ${pathname}` });
+      }
       filePath = path.join(CLIENT_DIR, "index.html");
     }
 
