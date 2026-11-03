@@ -1,0 +1,226 @@
+/**
+ * AniTAG Strict Design System Themes
+ * ABSOLUTE RULE: PURPLE IS STRICTLY PROHIBITED (0% Purple across all tokens).
+ * 60-30-10 Principle: 60% background, 30% surfaces, 10% accent.
+ */
+
+:root {
+  --app-font: 'Outfit', sans-serif;
+  --transition-theme: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease;
+  --accent-color: var(--accent);
+  --vol-fill-color: var(--accent);
+  --vol-text-color: var(--accent-text);
+}
+
+/* ==========================================================================
+   1. THEME 1: MONOCHROME (DEFAULT)
+   Neutral black, white, and grey identity.
+   ========================================================================== */
+html[data-theme="monochrome"],
+html[data-theme="monochrome"][data-mode="dark"] {
+  --bg-canvas: #151515;
+  --bg-surface: #222222;
+  --bg-elevated: #2C2C2C;
+  --bg-glass: rgba(34, 34, 34, 0.90);
+  --bg-pill: rgba(44, 44, 44, 0.85);
+  --text-main: #FFFFFF;
+  --text-muted: #BDBDBD;
+  --border-subtle: rgba(255, 255, 255, 0.10);
+  --border-hover: rgba(255, 255, 255, 0.25);
+  --accent: #FFFFFF;
+  --accent-text: #151515;
+  --accent-glow: rgba(255, 255, 255, 0.20);
+}
+
+html[data-theme="monochrome"][data-mode="light"] {
+  --bg-canvas: #F5F5F5;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #EBEBEB;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-pill: rgba(235, 235, 235, 0.90);
+  --text-main: #171717;
+  --text-muted: #666666;
+  --border-subtle: rgba(23, 23, 23, 0.12);
+  --border-hover: rgba(23, 23, 23, 0.28);
+  --accent: #171717;
+  --accent-text: #FFFFFF;
+  --accent-glow: rgba(23, 23, 23, 0.15);
+}
+
+/* ==========================================================================
+   2. THEME 2: MIDNIGHT CRIMSON
+   Visual direction: Action, Shonen, cinematic.
+   ========================================================================== */
+html[data-theme="midnight_crimson"],
+html[data-theme="midnight_crimson"][data-mode="dark"] {
+  --bg-canvas: #0B0B12;
+  --bg-surface: #16161F;
+  --bg-elevated: #20202C;
+  --bg-glass: rgba(22, 22, 31, 0.90);
+  --bg-pill: rgba(32, 32, 44, 0.85);
+  --text-main: #F2F2F7;
+  --text-muted: #9E9EA7;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 61, 90, 0.35);
+  --accent: #FF3D5A;
+  --accent-text: #FFFFFF;
+  --accent-glow: rgba(255, 61, 90, 0.28);
+}
+
+html[data-theme="midnight_crimson"][data-mode="light"] {
+  --bg-canvas: #F8F8FC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #EFEFF6;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-pill: rgba(239, 239, 246, 0.90);
+  --text-main: #14141E;
+  --text-muted: #6B6B78;
+  --border-subtle: rgba(20, 20, 30, 0.10);
+  --border-hover: rgba(224, 38, 67, 0.30);
+  --accent: #E02643;
+  --accent-text: #FFFFFF;
+  --accent-glow: rgba(224, 38, 67, 0.18);
+}
+
+/* ==========================================================================
+   3. THEME 3: ELECTRIC ORANGE
+   Visual direction: High energy and bold.
+   ========================================================================== */
+html[data-theme="electric_orange"],
+html[data-theme="electric_orange"][data-mode="dark"] {
+  --bg-canvas: #0F1115;
+  --bg-surface: #1B1E25;
+  --bg-elevated: #262B34;
+  --bg-glass: rgba(27, 30, 37, 0.90);
+  --bg-pill: rgba(38, 43, 52, 0.85);
+  --text-main: #FAFAFA;
+  --text-muted: #9DA3AE;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 138, 0, 0.35);
+  --accent: #FF8A00;
+  --accent-text: #0F1115;
+  --accent-glow: rgba(255, 138, 0, 0.28);
+}
+
+html[data-theme="electric_orange"][data-mode="light"] {
+  --bg-canvas: #F9FAFB;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #EDF0F3;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-pill: rgba(237, 240, 243, 0.90);
+  --text-main: #111418;
+  --text-muted: #606873;
+  --border-subtle: rgba(17, 20, 24, 0.10);
+  --border-hover: rgba(230, 118, 0, 0.30);
+  --accent: #E67600;
+  --accent-text: #FFFFFF;
+  --accent-glow: rgba(230, 118, 0, 0.18);
+}
+
+/* ==========================================================================
+   4. THEME 4: OCEAN TEAL
+   Visual direction: Clean, calm, premium.
+   ========================================================================== */
+html[data-theme="ocean_teal"],
+html[data-theme="ocean_teal"][data-mode="dark"] {
+  --bg-canvas: #0A1418;
+  --bg-surface: #12232A;
+  --bg-elevated: #1B323C;
+  --bg-glass: rgba(18, 35, 42, 0.90);
+  --bg-pill: rgba(27, 50, 60, 0.85);
+  --text-main: #E6FFFB;
+  --text-muted: #7E9FA8;
+  --border-subtle: rgba(230, 255, 251, 0.08);
+  --border-hover: rgba(20, 224, 196, 0.35);
+  --accent: #14E0C4;
+  --accent-text: #0A1418;
+  --accent-glow: rgba(20, 224, 196, 0.28);
+}
+
+html[data-theme="ocean_teal"][data-mode="light"] {
+  --bg-canvas: #F2F9F9;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #E2F0F1;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-pill: rgba(226, 240, 241, 0.90);
+  --text-main: #0B191E;
+  --text-muted: #537078;
+  --border-subtle: rgba(11, 25, 30, 0.10);
+  --border-hover: rgba(10, 168, 147, 0.30);
+  --accent: #0AA893;
+  --accent-text: #FFFFFF;
+  --accent-glow: rgba(10, 168, 147, 0.18);
+}
+
+/* ==========================================================================
+   5. THEME 5: SAKURA DUSK (Pink, Romance, Slice of Life)
+   ABSOLUTE RESTRICTION: STRICTLY PINK - 0% PURPLE / NO PURPLE UNDERTONES.
+   ========================================================================== */
+html[data-theme="sakura_dusk"],
+html[data-theme="sakura_dusk"][data-mode="dark"] {
+  --bg-canvas: #161013;
+  --bg-surface: #241A1E;
+  --bg-elevated: #32242A;
+  --bg-glass: rgba(36, 26, 30, 0.90);
+  --bg-pill: rgba(50, 36, 42, 0.85);
+  --text-main: #FFF1F6;
+  --text-muted: #A8959C;
+  --border-subtle: rgba(255, 241, 246, 0.08);
+  --border-hover: rgba(255, 122, 182, 0.35);
+  --accent: #FF7AB6;
+  --accent-text: #161013;
+  --accent-glow: rgba(255, 122, 182, 0.28);
+}
+
+html[data-theme="sakura_dusk"][data-mode="light"] {
+  --bg-canvas: #FCF5F8;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F5E6EE;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --bg-pill: rgba(245, 230, 238, 0.90);
+  --text-main: #24141F;
+  --text-muted: #755E6E;
+  --border-subtle: rgba(36, 20, 31, 0.10);
+  --border-hover: rgba(224, 77, 143, 0.30);
+  --accent: #E04D8F;
+  --accent-text: #FFFFFF;
+  --accent-glow: rgba(224, 77, 143, 0.18);
+}
+
+/* Global utility classes linked to active theme variables */
+body {
+  background-color: var(--bg-canvas) !important;
+  color: var(--text-main) !important;
+  font-family: var(--app-font) !important;
+  transition: var(--transition-theme);
+}
+
+.theme-surface {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.theme-elevated {
+  background-color: var(--bg-elevated) !important;
+}
+
+.theme-accent-btn {
+  background-color: var(--accent) !important;
+  color: var(--accent-text) !important;
+  box-shadow: 0 4px 16px var(--accent-glow) !important;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.theme-accent-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.theme-accent-text {
+  color: var(--accent) !important;
+}
+
+.theme-accent-border {
+  border-color: var(--accent) !important;
+}

@@ -330,23 +330,15 @@ const server = http.createServer(async (req, res) => {
         console.warn(`[Stream Resolver] Provider ${provider} direct fetch fallback:`, err.message);
       }
 
-      // High-availability direct stream fallback
+      // Honest Provider Response: If no verified streams could be resolved, return empty list
       return sendJson(res, 200, {
         provider,
         animeId,
         episode: ep,
         audio,
-        streams: [
-          {
-            id: `${provider}-direct-1`,
-            server: `${provider.toUpperCase()} Fast Direct`,
-            quality: "1080p HD",
-            type: "hls",
-            url: `/proxy?url=${encodeURIComponent(`https://anit-stream.cdn.net/stream/${anilistId || animeId}/${ep}/${audio}.m3u8`)}`,
-            subtitles: []
-          }
-        ],
-        subtitles: []
+        streams: [],
+        subtitles: [],
+        error: "No verified stream available for this episode on " + provider.toUpperCase()
       });
     }
 

@@ -1,0 +1,43 @@
+name: Supabase Scheduled Backup & Keep-Alive
+
+on:
+  schedule:
+    # Runs daily at 03:00 UTC (every 24 hours)
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  backup-and-keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Supabase Keep-Alive Health Ping
+        if: env.SUPABASE_URL != '' && env.SUPABASE_ANON_KEY != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          echo "Executing keep-alive health ping to prevent 7-day inactivity pause..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY" "$SUPABASE_URL/rest/v1/profiles?select=count" || echo "failed")
+          echo "Keep-alive response status: $STATUS"
+
+      - name: Execute Backup Utility
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node src/engine/db/backup.js
+
+      - name: Upload Backup Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anitag-database-backup
+          path: backups/
+          retention-days: 30

@@ -20,23 +20,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Google Identity Services for One-Click Sign In -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Strict Zero-Ad & Zero-Popup Shield -->
-  <script>
-    (function() {
-      'use strict';
-      window.open = function() { console.warn('[AniTAG Shield] Blocked popup window.open'); return null; };
-      const originalAssign = window.location.assign.bind(window.location);
-      const originalReplace = window.location.replace.bind(window.location);
-      function isSafe(u) {
-        try {
-          const t = new URL(u, window.location.href).hostname;
-          return t === window.location.hostname || t === 'localhost' || t === '127.0.0.1';
-        } catch { return false; }
-      }
-      window.location.assign = function(u) { if (isSafe(u)) originalAssign(u); else console.warn('[AniTAG Shield] Blocked redirect to:', u); };
-      window.location.replace = function(u) { if (isSafe(u)) originalReplace(u); else console.warn('[AniTAG Shield] Blocked redirect to:', u); };
-    })();
-  </script>
+  <!-- Strict Design System Themes (5 Approved Themes, 0% Purple, Light/Dark) -->
+  <link rel="stylesheet" href="themes.css" />
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -1922,51 +1907,62 @@
         </div>
       </div>
 
-      <!-- 1. DARK & LIGHT THEME SWITCHER (Linear Moon & Sun Icons) -->
+      <!-- 1. DARK & LIGHT THEME SWITCHER -->
       <div class="space-y-2.5">
-        <div class="text-xs font-semibold text-white">Appearance Theme</div>
+        <div class="text-xs font-semibold text-white">Appearance Mode</div>
         <div class="grid grid-cols-2 gap-2 text-xs">
           <button id="setDarkThemeBtn" class="py-2.5 px-3 rounded-xl font-bold accent-fill flex items-center justify-center gap-2 transition-all">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-            <span>Dark Theme</span>
+            <span>Dark</span>
           </button>
           <button id="setLightThemeBtn" class="py-2.5 px-3 rounded-xl font-medium kage-pill text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            <span>Light Theme</span>
+            <span>Light</span>
           </button>
         </div>
       </div>
 
-      <!-- 2. SOFT PASTEL MOOD COLOR OPTIONS -->
+      <!-- 2. FIVE APPROVED SYSTEM THEMES -->
       <div class="space-y-2.5 pt-2 border-t" style="border-color: var(--border-subtle);">
         <div class="flex items-center justify-between text-xs">
-          <span class="font-semibold text-white">Mood Accent (Soft Pastels)</span>
-          <span id="activeMoodNameLabel" class="text-neutral-400 text-[11px]">Pure White</span>
+          <span class="font-semibold text-white">Theme Style</span>
+          <span id="activeThemeNameLabel" class="text-neutral-400 text-[11px]">Monochrome</span>
         </div>
-        <div class="grid grid-cols-3 gap-2 text-xs">
-          <button data-mood="pure" data-color="#ffffff" data-text="#0b0b0e" data-label="Pure White" class="mood-color-btn p-2.5 rounded-xl kage-pill flex flex-col items-center gap-1.5 border-2 border-white">
-            <span class="w-6 h-6 rounded-full bg-white border border-black/15 shadow"></span>
-            <span class="font-medium text-[11px] text-white">Pure</span>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button data-theme="monochrome" data-label="Monochrome (Default)" class="theme-select-btn p-2.5 rounded-xl kage-pill flex items-center gap-2.5 border-2 border-white text-left">
+            <span class="w-5 h-5 rounded-full bg-white border border-black/30 shadow flex-shrink-0"></span>
+            <div>
+              <div class="font-medium text-[11px] text-white">Monochrome</div>
+              <div class="text-[9px] text-neutral-400">Default Clean</div>
+            </div>
           </button>
-          <button data-mood="matcha" data-color="#b7e4c7" data-text="#0b1d13" data-label="Pastel Matcha" class="mood-color-btn p-2.5 rounded-xl kage-pill flex flex-col items-center gap-1.5">
-            <span class="w-6 h-6 rounded-full bg-[#b7e4c7] border border-black/15 shadow"></span>
-            <span class="font-medium text-[11px] text-white">Matcha</span>
+          <button data-theme="midnight_crimson" data-label="Midnight Crimson" class="theme-select-btn p-2.5 rounded-xl kage-pill flex items-center gap-2.5 border-2 border-transparent text-left">
+            <span class="w-5 h-5 rounded-full bg-[#FF3D5A] border border-black/30 shadow flex-shrink-0"></span>
+            <div>
+              <div class="font-medium text-[11px] text-white">Crimson</div>
+              <div class="text-[9px] text-neutral-400">Shonen Energy</div>
+            </div>
           </button>
-          <button data-mood="sakura" data-color="#fbcfe8" data-text="#290b1a" data-label="Pastel Sakura" class="mood-color-btn p-2.5 rounded-xl kage-pill flex flex-col items-center gap-1.5">
-            <span class="w-6 h-6 rounded-full bg-[#fbcfe8] border border-black/15 shadow"></span>
-            <span class="font-medium text-[11px] text-white">Sakura</span>
+          <button data-theme="electric_orange" data-label="Electric Orange" class="theme-select-btn p-2.5 rounded-xl kage-pill flex items-center gap-2.5 border-2 border-transparent text-left">
+            <span class="w-5 h-5 rounded-full bg-[#FF8A00] border border-black/30 shadow flex-shrink-0"></span>
+            <div>
+              <div class="font-medium text-[11px] text-white">Orange</div>
+              <div class="text-[9px] text-neutral-400">Electric Pulse</div>
+            </div>
           </button>
-          <button data-mood="sky" data-color="#bae6fd" data-text="#082032" data-label="Pastel Sky" class="mood-color-btn p-2.5 rounded-xl kage-pill flex flex-col items-center gap-1.5">
-            <span class="w-6 h-6 rounded-full bg-[#bae6fd] border border-black/15 shadow"></span>
-            <span class="font-medium text-[11px] text-white">Sky Mist</span>
+          <button data-theme="ocean_teal" data-label="Ocean Teal" class="theme-select-btn p-2.5 rounded-xl kage-pill flex items-center gap-2.5 border-2 border-transparent text-left">
+            <span class="w-5 h-5 rounded-full bg-[#14E0C4] border border-black/30 shadow flex-shrink-0"></span>
+            <div>
+              <div class="font-medium text-[11px] text-white">Ocean Teal</div>
+              <div class="text-[9px] text-neutral-400">Deep Marine</div>
+            </div>
           </button>
-          <button data-mood="peach" data-color="#fed7aa" data-text="#2b1404" data-label="Pastel Peach" class="mood-color-btn p-2.5 rounded-xl kage-pill flex flex-col items-center gap-1.5">
-            <span class="w-6 h-6 rounded-full bg-[#fed7aa] border border-black/15 shadow"></span>
-            <span class="font-medium text-[11px] text-white">Peach</span>
-          </button>
-          <button data-mood="butter" data-color="#fef08a" data-text="#262004" data-label="Pastel Butter" class="mood-color-btn p-2.5 rounded-xl kage-pill flex flex-col items-center gap-1.5">
-            <span class="w-6 h-6 rounded-full bg-[#fef08a] border border-black/15 shadow"></span>
-            <span class="font-medium text-[11px] text-white">Butter</span>
+          <button data-theme="sakura_dusk" data-label="Sakura Dusk" class="col-span-2 theme-select-btn p-2.5 rounded-xl kage-pill flex items-center gap-2.5 border-2 border-transparent text-left">
+            <span class="w-5 h-5 rounded-full bg-[#FF7AB6] border border-black/30 shadow flex-shrink-0"></span>
+            <div>
+              <div class="font-medium text-[11px] text-white">Sakura Dusk (Pink)</div>
+              <div class="text-[9px] text-neutral-400">Warm Rose / 0% Purple</div>
+            </div>
           </button>
         </div>
       </div>
@@ -2062,6 +2058,18 @@
   <!-- APPLICATION LOGIC (ZERO EMOJIS, LINEAR SVG HELPERS, SINGLE FONT)      -->
   <!-- ===================================================================== -->
   <script>
+    // Environment-Aware API Base URL Resolver (Web, Windows Desktop, Android WebViewAssetLoader)
+    function getApiBaseUrl() {
+      if (window.ANITAG_CONFIG && window.ANITAG_CONFIG.API_BASE_URL) return window.ANITAG_CONFIG.API_BASE_URL;
+      if (window.location.origin === 'https://appassets.androidplatform.net' || window.location.protocol === 'file:') {
+        return 'https://anitag-stream.onrender.com';
+      }
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return `${window.location.protocol}//${window.location.host}`;
+      }
+      return window.location.origin;
+    }
+
     // Reusable Minimalist Linear SVG Icons
     const LINEAR_ICONS = {
       star: `<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
@@ -2085,7 +2093,6 @@
         sub: 170,
         dub: 170,
         total: 170,
-        views: 1840,
         status: 'Completed',
         trendingRank: 1,
         topCategory: ['today', 'week', 'all'],
@@ -2107,7 +2114,6 @@
         sub: 12,
         dub: 12,
         total: 12,
-        views: 920,
         status: 'Airing',
         trendingRank: 2,
         topCategory: ['today', 'week'],
@@ -2129,7 +2135,6 @@
         sub: 9,
         dub: 8,
         total: 10,
-        views: 1490,
         status: 'Airing',
         trendingRank: 3,
         topCategory: ['today', 'week', 'all'],
@@ -2151,7 +2156,6 @@
         sub: 3,
         dub: 1,
         total: 12,
-        views: 1120,
         status: 'Airing',
         trendingRank: 4,
         topCategory: ['today', 'week'],
@@ -2173,7 +2177,6 @@
         sub: 14,
         dub: 14,
         total: 14,
-        views: 1050,
         status: 'Completed',
         trendingRank: 5,
         topCategory: ['week', 'all'],
@@ -2195,7 +2198,6 @@
         sub: 1180,
         dub: 1155,
         total: 1180,
-        views: 2450,
         status: 'Airing',
         trendingRank: 6,
         topCategory: ['today', 'week', 'all'],
@@ -2217,7 +2219,6 @@
         sub: 19,
         dub: 18,
         total: 19,
-        views: 1380,
         status: 'Airing',
         trendingRank: 7,
         topCategory: ['today', 'week', 'all'],
@@ -2239,7 +2240,6 @@
         sub: 24,
         dub: 24,
         total: 24,
-        views: 890,
         status: 'Completed',
         trendingRank: 8,
         topCategory: ['week'],
@@ -2261,7 +2261,6 @@
         sub: 3,
         dub: 3,
         total: 12,
-        views: 740,
         status: 'Airing',
         trendingRank: 9,
         topCategory: ['today'],
@@ -2283,7 +2282,6 @@
         sub: 12,
         dub: 12,
         total: 12,
-        views: 2180,
         status: 'Completed',
         trendingRank: 5,
         topCategory: ['today', 'week', 'all'],
@@ -2305,7 +2303,6 @@
         sub: 12,
         dub: 12,
         total: 12,
-        views: 840,
         status: 'Airing',
         trendingRank: 10,
         topCategory: ['today'],
@@ -2327,7 +2324,6 @@
         sub: 12,
         dub: 12,
         total: 12,
-        views: 704,
         status: 'Completed',
         trendingRank: 11,
         topCategory: ['week', 'all'],
@@ -2349,7 +2345,6 @@
         sub: 11,
         dub: 11,
         total: 11,
-        views: 615,
         status: 'Completed',
         trendingRank: 12,
         topCategory: ['today'],
@@ -2397,13 +2392,13 @@
       'apothecary-diaries-s3': { anilistId: 161645, malId: 54492, studio: 'TOHO animation STUDIO × OLM', duration: '24 min / ep', season: 'Winter 2025', palette: ['#10b981', '#064e3b'] },
       'mushoku-tensei-s3': { anilistId: 146065, malId: 51179, studio: 'Studio Bind', duration: '24 min / ep', season: 'Spring 2024', palette: ['#eab308', '#312e81'] },
       'one-piece': { anilistId: 21, malId: 21, studio: 'Toei Animation', duration: '24 min / ep', season: 'Fall 1999', palette: ['#f59e0b', '#1e3a8a'] },
-      're-zero-s4': { anilistId: 163134, malId: 54857, studio: 'WHITE FOX', duration: '25 min / ep', season: 'Fall 2024', palette: ['#8b5cf6', '#1e1b4b'] },
+      're-zero-s4': { anilistId: 163134, malId: 54857, studio: 'WHITE FOX', duration: '25 min / ep', season: 'Fall 2024', palette: ['#0284c7', '#0f172a'] },
       'slime-s4': { anilistId: 156822, malId: 53580, studio: '8bit', duration: '24 min / ep', season: 'Spring 2024', palette: ['#38bdf8', '#0c4a6e'] },
       'blue-box-s2': { anilistId: 170942, malId: 57181, studio: 'Telecom Animation Film', duration: '24 min / ep', season: 'Fall 2024', palette: ['#60a5fa', '#172554'] },
       'solo-leveling': { anilistId: 151807, malId: 52299, studio: 'A-1 Pictures', duration: '24 min / ep', season: 'Winter 2024', palette: ['#3b82f6', '#090d16'] },
       'overgeared': { anilistId: 0, malId: 52299, studio: 'REDICE × Studio Mir', duration: '24 min / ep', season: 'Winter 2026', palette: ['#ea580c', '#1c1917'] },
       'smoking-supermarket': { anilistId: 162804, malId: 55973, studio: 'Asahi Production', duration: '24 min / ep', season: 'Summer 2026', palette: ['#ec4899', '#1f122b'] },
-      'inept-villainess': { anilistId: 166216, malId: 56524, studio: 'Doga Kobo', duration: '24 min / ep', season: 'Spring 2026', palette: ['#f43f5e', '#2e1065'] }
+      'inept-villainess': { anilistId: 166216, malId: 56524, studio: 'Doga Kobo', duration: '24 min / ep', season: 'Spring 2026', palette: ['#f43f5e', '#1c1917'] }
     };
 
     // Authentic Episode Titles per Anime (Zero cross-anime title bleed + live Jikan API hydration)
@@ -2804,10 +2799,9 @@
           }
         } catch (e) {}
 
-        // 3. Also query our integrated Anivexa backend (/episodes/anikoto/:id) if running on server
-        if (location.protocol.startsWith('http')) {
-          try {
-            const avRes = await fetch(`/episodes/anikoto/${anilistId}?map=false`);
+        // 3. Query integrated Anivexa backend (/episodes/anikoto/:id) using environment-aware API URL
+        try {
+          const avRes = await fetch(`${getApiBaseUrl()}/episodes/anikoto/${anilistId}?map=false`);
             if (avRes.ok) {
               const avJson = await avRes.json();
               const provData = (avJson && (avJson.anikoto || avJson.animegg || avJson.mkissa || avJson.anibd || avJson['2dhive'] || avJson.data)) || {};
@@ -2857,10 +2851,11 @@
 
     const state = {
       lang: 'en',
-      themeMode: 'dark',
+      themeMode: (function() { try { return localStorage.getItem('anitag_theme_mode') || 'dark'; } catch(e) { return 'dark'; } })(),
+      themeId: (function() { try { return localStorage.getItem('anitag_theme_id') || 'monochrome'; } catch(e) { return 'monochrome'; } })(),
       moodColor: '#ffffff',
       moodText: '#0b0b0e',
-      moodLabel: 'Pure White',
+      moodLabel: 'Monochrome',
       showAudioBanner: true,
       currentView: 'home',
       heroIndex: 0,
@@ -2869,25 +2864,15 @@
       topRange: 'today',
       browseGenre: 'All',
       scheduleDay: 'Sat',
-      watchlist: new Set(['black-clover', 'bleach-tybw', 'apothecary-diaries-s3']),
-      continueWatching: [
-        { id: 'black-clover', ep: 142, timeSec: 845, totalSec: 1432, audio: 'SUB' },
-        { id: 'bleach-tybw', ep: 9, timeSec: 512, totalSec: 1432, audio: 'SUB' },
-        { id: 'apothecary-diaries-s3', ep: 3, timeSec: 1120, totalSec: 1432, audio: 'DUB' },
-        { id: 're-zero-s4', ep: 18, timeSec: 260, totalSec: 1432, audio: 'DUB' }
-      ],
-      watchHistory: [
-        { uid: 'black-clover-142', id: 'black-clover', ep: 142, timeSec: 845, totalSec: 1432, audio: 'SUB', watchedAt: 'Today • 22:15' },
-        { uid: 'bleach-tybw-9', id: 'bleach-tybw', ep: 9, timeSec: 512, totalSec: 1432, audio: 'SUB', watchedAt: 'Today • 20:40' },
-        { uid: 'one-piece-1180', id: 'one-piece', ep: 1180, timeSec: 1310, totalSec: 1432, audio: 'SUB', watchedAt: 'Yesterday' },
-        { uid: 'apothecary-diaries-s3-3', id: 'apothecary-diaries-s3', ep: 3, timeSec: 1120, totalSec: 1432, audio: 'DUB', watchedAt: 'Yesterday' }
-      ],
+      watchlist: new Set(),
+      continueWatching: [],
+      watchHistory: [],
       playerOpen: false,
       activeAnime: ANIME_CATALOG[0],
       activeEpisode: 1,
       audioMode: 'SUB',
       isPlaying: false,
-      currentTime: 13,
+      currentTime: 0,
       duration: 1432,
       volume: 80,
       isMuted: false,
@@ -2898,8 +2883,6 @@
       theaterMode: false,
       hapticSound: true,
       subSize: 17,
-      likes: 142,
-      liked: false,
       modalAnime: null
     };
 
@@ -3107,46 +3090,72 @@
     }
 
     // -----------------------------------------------------------------------
-    // THEME (DARK / LIGHT) & SOFT PASTEL MOOD ENGINE
+    // STRICT 5-THEME SYSTEM (0% PURPLE) - LIGHT & DARK VARIANTS
     // -----------------------------------------------------------------------
+    const THEME_NAMES = {
+      monochrome: 'Monochrome (Default)',
+      midnight_crimson: 'Midnight Crimson',
+      electric_orange: 'Electric Orange',
+      ocean_teal: 'Ocean Teal',
+      sakura_dusk: 'Sakura Dusk'
+    };
+
     function applyThemeAndMood() {
       const root = document.documentElement;
-      // Volume capsule is always dark-glass, so its inner fill is ALWAYS bright pastel or pure white with dark ink text
-      root.style.setProperty('--vol-fill-color', state.moodColor);
-      root.style.setProperty('--vol-text-color', state.moodText || '#0b0b0e');
+      state.themeId = state.themeId || 'monochrome';
+      state.themeMode = state.themeMode || 'dark';
+
+      root.setAttribute('data-theme', state.themeId);
+      root.setAttribute('data-mode', state.themeMode);
 
       if (state.themeMode === 'light') {
         root.classList.add('light-theme');
         root.classList.remove('dark');
-        document.getElementById('themeMoonIcon').classList.add('hidden');
-        document.getElementById('themeSunIcon').classList.remove('hidden');
-        document.getElementById('setLightThemeBtn').className = 'py-2.5 px-3 rounded-xl font-bold accent-fill flex items-center justify-center gap-2 transition-all';
-        document.getElementById('setDarkThemeBtn').className = 'py-2.5 px-3 rounded-xl font-medium kage-pill text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all';
-        if (state.moodColor === '#ffffff') {
-          root.style.setProperty('--accent-color', '#18181b');
-          root.style.setProperty('--accent-text', '#ffffff');
-        } else {
-          root.style.setProperty('--accent-color', state.moodColor);
-          root.style.setProperty('--accent-text', state.moodText);
-        }
+        const moon = document.getElementById('themeMoonIcon');
+        const sun = document.getElementById('themeSunIcon');
+        if (moon) moon.classList.add('hidden');
+        if (sun) sun.classList.remove('hidden');
+        const darkBtn = document.getElementById('setDarkThemeBtn');
+        const lightBtn = document.getElementById('setLightThemeBtn');
+        if (darkBtn) darkBtn.className = 'py-2.5 px-3 rounded-xl font-medium kage-pill text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all';
+        if (lightBtn) lightBtn.className = 'py-2.5 px-3 rounded-xl font-bold accent-fill flex items-center justify-center gap-2 transition-all';
       } else {
         root.classList.remove('light-theme');
         root.classList.add('dark');
-        document.getElementById('themeMoonIcon').classList.remove('hidden');
-        document.getElementById('themeSunIcon').classList.add('hidden');
-        document.getElementById('setDarkThemeBtn').className = 'py-2.5 px-3 rounded-xl font-bold accent-fill flex items-center justify-center gap-2 transition-all';
-        document.getElementById('setLightThemeBtn').className = 'py-2.5 px-3 rounded-xl font-medium kage-pill text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all';
-        root.style.setProperty('--accent-color', state.moodColor);
-        root.style.setProperty('--accent-text', state.moodText);
+        const moon = document.getElementById('themeMoonIcon');
+        const sun = document.getElementById('themeSunIcon');
+        if (moon) moon.classList.remove('hidden');
+        if (sun) sun.classList.add('hidden');
+        const darkBtn = document.getElementById('setDarkThemeBtn');
+        const lightBtn = document.getElementById('setLightThemeBtn');
+        if (darkBtn) darkBtn.className = 'py-2.5 px-3 rounded-xl font-bold accent-fill flex items-center justify-center gap-2 transition-all';
+        if (lightBtn) lightBtn.className = 'py-2.5 px-3 rounded-xl font-medium kage-pill text-neutral-300 hover:text-white flex items-center justify-center gap-2 transition-all';
       }
 
-      document.getElementById('activeMoodNameLabel').textContent = state.moodLabel;
+      const activeLabel = document.getElementById('activeThemeNameLabel');
+      if (activeLabel) {
+        activeLabel.textContent = THEME_NAMES[state.themeId] || 'Monochrome';
+      }
+
+      document.querySelectorAll('.theme-select-btn').forEach(btn => {
+        if (btn.dataset.theme === state.themeId) {
+          btn.classList.add('border-white');
+          btn.classList.remove('border-transparent');
+        } else {
+          btn.classList.remove('border-white');
+          btn.classList.add('border-transparent');
+        }
+      });
+
+      try {
+        localStorage.setItem('anitag_theme_id', state.themeId);
+        localStorage.setItem('anitag_theme_mode', state.themeMode);
+      } catch (e) {}
+
       if (window.aniTagSync) {
         window.aniTagSync.pushUserDataToCloud('SETTINGS', {
           themeMode: state.themeMode,
-          moodLabel: state.moodLabel,
-          moodColor: state.moodColor,
-          moodText: state.moodText,
+          themeId: state.themeId,
           audioMode: state.audioMode
         });
       }
@@ -3219,7 +3228,7 @@
 
       const extras = getAnimeExtras(anime);
       document.getElementById('heroFormatYear').textContent = `${anime.format} • ${anime.year} • ${extras.studio}`;
-      document.getElementById('heroScore').textContent = anime.score.toFixed(1);
+      document.getElementById('heroScore').textContent = anime.score != null ? anime.score.toFixed(1) : 'N/A';
       document.getElementById('heroSubCount').textContent = anime.sub;
       document.getElementById('heroDubCount').textContent = anime.dub;
       document.getElementById('heroTotalCount').textContent = `${anime.total} eps`;
@@ -3261,7 +3270,7 @@
             <!-- Rating Pill with Linear Star Icon -->
             <div class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 text-[11px] font-bold text-yellow-400 tabular-nums flex items-center gap-1">
               ${LINEAR_ICONS.star}
-              <span>${anime.score.toFixed(1)}</span>
+              <span>${anime.score != null ? anime.score.toFixed(1) : 'N/A'}</span>
             </div>
 
             <!-- Format & Year Badge Top-Right -->
@@ -3423,10 +3432,9 @@
           <div class="flex-1 min-w-0">
             <h4 class="text-xs font-semibold text-neutral-100 group-hover:text-white truncate">${getTitle(anime)}</h4>
             <div class="flex items-center gap-2.5 mt-1 text-[10px] text-neutral-400 tabular-nums">
-              <span class="text-yellow-500 font-bold flex items-center gap-1">${LINEAR_ICONS.star}<span>${anime.score.toFixed(1)}</span></span>
-              <span>${anime.format}</span>
-              <span class="flex items-center gap-1">${LINEAR_ICONS.eye}<span>${anime.views}</span></span>
-              <span>CC ${anime.sub}</span>
+              <span class="text-yellow-500 font-bold flex items-center gap-1">${LINEAR_ICONS.star}<span>${typeof anime.score === 'number' ? anime.score.toFixed(1) : 'Unrated'}</span></span>
+              <span>${anime.format || 'TV'}</span>
+              <span>CC ${anime.sub || ''}</span>
             </div>
           </div>
         </div>
@@ -4390,18 +4398,8 @@
         });
       }
 
-      // Only if opened as local file:// or sandboxed preview without external embed access, keep a single OP preview at the very bottom
-      const previewList = DIRECT_ANIME_EPISODE_STREAMS[anime.id] || REAL_ANIME_FALLBACK_STREAMS;
-      if (previewList && previewList.length) {
-        list.push({
-          server: 'Theme Preview (90s OP)',
-          type: 'video',
-          isM3U8: false,
-          isPreviewClip: true,
-          url: previewList[(episodeNum - 1) % previewList.length]
-        });
-      }
-
+      // Honest Stream Queue: Only verified full-length streams and embed mirrors are included.
+      // Fake opening-song (OP) fallbacks have been removed.
       return list;
     }
 
@@ -4415,10 +4413,8 @@
       sel.classList.remove('hidden');
       sel.innerHTML = activeStreamQueue.map((item, idx) => {
         const label = item.server || `Mirror #${idx + 1}`;
-        const kind = item.isPreviewClip
-          ? 'OP Preview'
-          : (item.type === 'embed' ? 'Full Episode Cloud' : (item.isM3U8 || item.type === 'hls' ? 'Direct HLS' : 'Direct MP4'));
-        return `<option value="${idx}" ${idx === activeStreamIndex ? 'selected' : ''} style="background:#141418;color:#fff;">${label} (${kind})</option>`;
+        const kind = item.type === 'embed' ? 'Cloud Mirror' : (item.isM3U8 || item.type === 'hls' ? 'Direct HLS' : 'Direct MP4');
+        return `<option value="${idx}" ${idx === activeStreamIndex ? 'selected' : ''} style="background:var(--bg-surface);color:var(--text-main);">${label} (${kind})</option>`;
       }).join('');
     }
 
@@ -4552,14 +4548,13 @@
       const backendDirectStreams = [];
       const backendEmbedStreams = [];
 
-      if (location.protocol.startsWith('http')) {
-        try {
-          const ctrl = new AbortController();
-          const tId = setTimeout(() => ctrl.abort(), 9500);
-          const resp = await fetch(
-            `/api/stream?provider=${encodeURIComponent(provider)}&animeId=${encodeURIComponent(anime.id)}&anilistId=${anilistId}&malId=${malId}&title=${encodeURIComponent(anime.titleEn)}&ep=${episodeNum}&audio=${audioLower}`,
-            { signal: ctrl.signal }
-          );
+      try {
+        const ctrl = new AbortController();
+        const tId = setTimeout(() => ctrl.abort(), 9500);
+        const resp = await fetch(
+          `${getApiBaseUrl()}/api/stream?provider=${encodeURIComponent(provider)}&animeId=${encodeURIComponent(anime.id)}&anilistId=${anilistId}&malId=${malId}&title=${encodeURIComponent(anime.titleEn)}&ep=${episodeNum}&audio=${audioLower}`,
+          { signal: ctrl.signal }
+        );
           clearTimeout(tId);
           if (resp.ok && myToken === currentLoadToken) {
             const data = await resp.json();
@@ -4647,7 +4642,7 @@
       const statusBadge = document.getElementById('watchDetailStatusBadge');
       if (statusBadge) statusBadge.textContent = anime.status;
       const scoreBadge = document.getElementById('watchDetailScoreBadge');
-      if (scoreBadge) scoreBadge.textContent = `★ ${anime.score.toFixed(1)}`;
+      if (scoreBadge) scoreBadge.textContent = anime.score != null ? `★ ${anime.score.toFixed(1)}` : '★ Unrated';
       const studioBadge = document.getElementById('watchDetailStudioBadge');
       if (studioBadge) studioBadge.textContent = extras.studio;
       const fullTitle = document.getElementById('watchDetailFullTitle');
@@ -4982,15 +4977,11 @@
       });
     });
 
-    document.querySelectorAll('.mood-color-btn').forEach(btn => {
+    document.querySelectorAll('.theme-select-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        state.moodColor = btn.dataset.color;
-        state.moodText = btn.dataset.text;
-        state.moodLabel = btn.dataset.label;
-        document.querySelectorAll('.mood-color-btn').forEach(b => b.classList.remove('border-2', 'border-white'));
-        btn.classList.add('border-2', 'border-white');
+        state.themeId = btn.dataset.theme;
         applyThemeAndMood();
-        showToast(`Mood Theme: ${state.moodLabel}`);
+        showToast(`Theme: ${THEME_NAMES[state.themeId] || state.themeId}`);
       });
     });
 
@@ -5069,7 +5060,7 @@
               <div class="text-[10px] text-neutral-400 tabular-nums flex items-center gap-1.5">
                 <span>${anime.format}</span>
                 <span>•</span>
-                <span class="flex items-center gap-0.5 text-yellow-400">${LINEAR_ICONS.star}<span>${anime.score}</span></span>
+                <span class="flex items-center gap-0.5 text-yellow-400">${LINEAR_ICONS.star}<span>${typeof anime.score === 'number' ? anime.score.toFixed(1) : 'Unrated'}</span></span>
                 <span>•</span>
                 <span>CC ${anime.sub}</span>
               </div>
@@ -5140,11 +5131,10 @@
                   titleJp: m.title.native || m.title.romaji || '',
                   year: m.seasonYear || 2025,
                   format: m.format || 'TV',
-                  score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : 8.0,
+                  score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : null,
                   sub: totalEps,
                   dub: totalEps,
                   total: totalEps,
-                  views: 950,
                   status: m.status === 'RELEASING' ? 'Airing' : 'Completed',
                   trendingRank: 99,
                   topCategory: ['all'],
@@ -5986,7 +5976,7 @@
       document.getElementById('modalBadgesRow').innerHTML = `
         <span class="px-2.5 py-0.5 rounded-full kage-pill text-white font-semibold">${anime.format} • ${anime.year}</span>
         <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-bold">${anime.status}</span>
-        <span class="px-2.5 py-0.5 rounded-full bg-yellow-400/15 text-yellow-500 font-bold flex items-center gap-1">${LINEAR_ICONS.star}<span>${anime.score}</span></span>
+        <span class="px-2.5 py-0.5 rounded-full bg-yellow-400/15 text-yellow-500 font-bold flex items-center gap-1">${LINEAR_ICONS.star}<span>${typeof anime.score === 'number' ? anime.score.toFixed(1) : 'Unrated'}</span></span>
         <span class="px-2.5 py-0.5 rounded-full kage-pill text-neutral-200 flex items-center gap-1">${LINEAR_ICONS.cc}<span>${anime.sub} Sub</span></span>
         <span class="px-2.5 py-0.5 rounded-full kage-pill text-neutral-200 flex items-center gap-1">${LINEAR_ICONS.mic}<span>${anime.dub} Dub</span></span>
         <span class="px-2.5 py-0.5 rounded-full kage-pill text-neutral-300 font-medium">${extras.studio}</span>

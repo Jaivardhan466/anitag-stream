@@ -8,6 +8,12 @@ src/mobile/android/.gradle/
 src/mobile/android/app/build/
 src/mobile/android/build/
 *.keystore
+*.apk
+*.idsig
+build_apk_native.ps1
+
+# Backups
+backups/
 
 # Desktop / Electron outputs
 dist-windows/

@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.PictureInPictureParams;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Rational;
@@ -17,27 +18,38 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import androidx.webkit.WebViewAssetLoader;
 
 /**
- * Native Android Activity for AniTAG Streaming Application
- * Complete with:
- * 1. Hardware accelerated WebView rendering almost anitag UI
- * 2. Strict Zero-Popup & Zero-Redirect Ad Blocking
- * 3. Android Picture-in-Picture (PiP)
+ * Native Android Activity for AniTAG Streaming Application.
+ * 
+ * Secure Architecture:
+ * 1. Uses WebViewAssetLoader to serve local assets from https://appassets.androidplatform.net/assets/
+ *    - Eliminates file:/// protocol
+ *    - Disables allowUniversalAccessFromFileURLs and allowFileAccess
+ *    - Provides a real HTTPS origin for clean CORS and API fetches
+ * 2. Strict Zero-Popup & Zero-Redirect Enforcement
+ * 3. Native Android Picture-in-Picture (PiP)
  * 4. Immersive Fullscreen Video Player Mode
  */
 public class MainActivity extends Activity {
 
     private WebView webView;
-    private static final String APP_URL = "file:///android_asset/index.html";
+    private WebViewAssetLoader assetLoader;
+    private static final String APP_URL = "https://appassets.androidplatform.net/assets/index.html";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Dark Canvas Background (#0B0B0E matching almost anitag glassmorphic design)
-        getWindow().getDecorView().setBackgroundColor(Color.parseColor("#0B0B0E"));
+        // Dark Canvas Background (#151515 matching default Monochrome theme)
+        getWindow().getDecorView().setBackgroundColor(Color.parseColor("#151515"));
+
+        // Initialize Secure WebViewAssetLoader
+        assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
 
         webView = new WebView(this);
         setContentView(webView);
@@ -52,31 +64,35 @@ public class MainActivity extends Activity {
         settings.setLoadsImagesAutomatically(true);
         settings.setSupportMultipleWindows(false); // Disallow popup windows
         settings.setJavaScriptCanOpenWindowsAutomatically(false); // Block automatic popups
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
+
+        // Security Hardening: File and Content access disabled
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
 
         // Hardware Acceleration
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-        // Strict Zero-Ad & Zero-Popup Client Interceptor
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString().toLowerCase();
 
-                // Block known ad/popup networks
+                // Block known malicious ad/popup redirect patterns
                 if (url.contains("popads") || url.contains("adsterra") || url.contains("propellerads")
                         || url.contains("monetag") || url.contains("onclick") || url.contains("syndication")
                         || url.contains("redirect") || url.contains("bet365") || url.contains("1xbet")) {
                     return true; // Blocked
                 }
 
-                // Internal asset or app endpoints stay inside webview
-                if (url.startsWith("file:///android_asset") || url.startsWith("http://10.0.2.2") || url.startsWith("http://localhost") || url.startsWith("https://")) {
+                // Allow app assets and secure API/media stream targets
+                if (url.startsWith("https://appassets.androidplatform.net")
+                        || url.startsWith("https://anitag-stream.onrender.com")
+                        || url.startsWith("https://")
+                        || url.startsWith("http://10.0.2.2")
+                        || url.startsWith("http://localhost")) {
                     return false;
                 }
 
@@ -85,11 +101,21 @@ public class MainActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString().toLowerCase();
+                Uri uri = request.getUrl();
+
+                // 1. Local secure asset intercept
+                WebResourceResponse assetResponse = assetLoader.shouldInterceptRequest(uri);
+                if (assetResponse != null) {
+                    return assetResponse;
+                }
+
+                // 2. Block known tracking/ad domains
+                String url = uri.toString().toLowerCase();
                 if (url.contains("googleads") || url.contains("doubleclick") || url.contains("adservice")
                         || url.contains("adnxs") || url.contains("adsystem") || url.contains("histats")) {
                     return new WebResourceResponse("text/plain", "UTF-8", null);
                 }
+
                 return super.shouldInterceptRequest(view, request);
             }
         });
@@ -97,11 +123,11 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
-                return false; // Strict block all popup creation
+                return false; // Strict block on popup creation
             }
         });
 
-        // Load AniTAG UI from bundled assets
+        // Load AniTAG UI via secure HTTPS asset loader
         webView.loadUrl(APP_URL);
     }
 

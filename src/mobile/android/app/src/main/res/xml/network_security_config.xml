@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Enforce HTTPS across the entire application -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Allow local development host in debug builds only if needed -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">onrender.com</domain>
+        <domain includeSubdomains="true">anilist.co</domain>
+        <domain includeSubdomains="true">ani.zip</domain>
+        <domain includeSubdomains="true">jikan.moe</domain>
+    </domain-config>
+</network-security-config>
