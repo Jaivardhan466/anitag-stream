@@ -38,6 +38,32 @@ export function getWsSyncUrl() {
   }
 }
 
+export function getAuthRedirectUrl() {
+  if (typeof window !== 'undefined' && window.ANITAG_CONFIG && window.ANITAG_CONFIG.AUTH_REDIRECT_URL) {
+    return window.ANITAG_CONFIG.AUTH_REDIRECT_URL;
+  }
+
+  if (typeof window === 'undefined') {
+    return 'http://localhost:4000';
+  }
+
+  // In Android WebViewAssetLoader or local file://, OAuth must redirect to the authorized web domain
+  if (window.location.origin === 'https://appassets.androidplatform.net' || window.location.protocol === 'file:') {
+    return 'https://anitag-stream.onrender.com';
+  }
+
+  // Web or local dev: redirect back to current origin
+  return window.location.origin;
+}
+
+export function resolveApiUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const base = getApiBaseUrl().replace(/\/+$/, '');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${cleanPath}`;
+}
+
 export function getSupabaseConfig() {
   if (typeof window !== 'undefined' && window.ANITAG_CONFIG && window.ANITAG_CONFIG.SUPABASE_URL) {
     return {

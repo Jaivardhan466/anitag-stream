@@ -12,7 +12,8 @@
     "build:android": "cd src/mobile/android && ./gradlew assembleRelease",
     "db:backup": "node src/engine/db/backup.js",
     "db:restore": "node src/engine/db/restore.js",
-    "test": "node tests/test_backup_restore.js",
+    "test": "node tests/test_backup_restore.js && node tests/test_auth_and_connectivity.js",
+    "test:auth": "node tests/test_auth_and_connectivity.js",
     "test:db": "node tests/test_backup_restore.js",
     "test:health": "node -e \"fetch('http://localhost:4000/healthz').then(r=>r.json()).then(console.log)\""
   },

@@ -190,3 +190,24 @@ export async function clearStorageStore(storeName) {
 }
 
 export { STORES };
+export const STORAGE_KEYS = STORES;
+
+export async function saveItem(storeName, item) {
+  return setStorageItem(storeName, item);
+}
+
+export async function loadItem(storeName, key) {
+  return getStorageItem(storeName, key);
+}
+
+export async function getAllItems(storeName) {
+  return getAllStorageItems(storeName);
+}
+
+export async function removeItem(storeName, key) {
+  return removeStorageItem(storeName, key);
+}
+
+export async function clearStore(storeName) {
+  return clearStorageStore(storeName);
+}

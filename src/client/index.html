@@ -18,8 +18,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Google Identity Services for One-Click Sign In -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Supabase Cloud Client (Authoritative auth.users.id & Cloud Replication) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Strict Design System Themes (5 Approved Themes, 0% Purple, Light/Dark) -->
   <link rel="stylesheet" href="themes.css" />
   <script>
@@ -4563,11 +4563,12 @@
               const u = s && (s.url || s.extractedUrl || s.rawUrl);
               if (!u || s.isPreviewClip) return;
               const isEmb = String(s.type || '').toLowerCase() === 'embed';
+              const fullUrl = u.startsWith('/') ? `${getApiBaseUrl()}${u}` : u;
               if (isEmb) {
                 backendEmbedStreams.push({
                   server: s.server || s.name || `${(data.provider || provider).toUpperCase()} Cloud`,
                   type: 'embed',
-                  url: u
+                  url: fullUrl
                 });
               } else {
                 const rawU = s.rawUrl || s.extractedUrl || u;
@@ -4576,16 +4577,17 @@
                   server: s.server || s.name || `${(data.provider || provider).toUpperCase()} Direct HD`,
                   type: isHlsStream ? 'hls' : 'video',
                   isM3U8: isHlsStream,
-                  url: u,
+                  url: fullUrl,
                   rawUrl: rawU,
                   subtitles: s.subtitles || data.subtitles || []
                 });
                 if (s.proxiedUrl && s.proxiedUrl !== u) {
+                  const fullProxiedUrl = s.proxiedUrl.startsWith('/') ? `${getApiBaseUrl()}${s.proxiedUrl}` : s.proxiedUrl;
                   backendDirectStreams.push({
                     server: (s.server || s.name || (data.provider || provider).toUpperCase()) + ' (Proxy)',
                     type: isHlsStream ? 'hls' : 'video',
                     isM3U8: isHlsStream,
-                    url: s.proxiedUrl,
+                    url: fullProxiedUrl,
                     rawUrl: rawU,
                     subtitles: s.subtitles || data.subtitles || []
                   });
@@ -6176,36 +6178,25 @@
       syncVolumeVisuals(state.volume);
       updateNavActivePills('home');
       hydrateCatalogFromAniList();
-      // Setup Google Sign In button trigger
+      // Setup Genuine Google Sign In / Sign Out button trigger
       const gAuthBtn = document.getElementById('googleAuthBtn');
       if (gAuthBtn) {
-        gAuthBtn.addEventListener('click', () => {
-          if (window.aniTagSync && window.aniTagSync.user) {
-            if (confirm(`Currently signed in as ${window.aniTagSync.user.email}. Do you want to sign out?`)) {
-              window.aniTagSync.signOutGoogle();
+        gAuthBtn.addEventListener('click', async () => {
+          if (window.aniTagCloud && window.aniTagCloud.isAuthenticated()) {
+            const email = window.aniTagCloud.getUserEmail() || 'your account';
+            if (confirm(`Currently signed in as ${email}. Do you want to sign out?`)) {
+              await window.aniTagCloud.signOut();
             }
-          } else if (window.google && window.google.accounts && window.google.accounts.id) {
-            window.google.accounts.id.prompt();
-          } else if (window.aniTagSync) {
-            // Instant sign-in fallback for local testing & desktop app
-            window.aniTagSync.signInWithGoogle(null);
+          } else if (window.aniTagCloud) {
+            await window.aniTagCloud.signInWithGoogle();
           }
         });
       }
-
-      // Initialize Google Identity Services One Tap prompt
-      try {
-        if (window.google && window.google.accounts && window.google.accounts.id) {
-          window.google.accounts.id.initialize({
-            client_id: "ANITAG_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
-            callback: (res) => window.aniTagSync && window.aniTagSync.signInWithGoogle(res),
-            auto_select: true
-          });
-          window.google.accounts.id.prompt();
-        }
-      } catch (e) {}
     });
   </script>
-  <script src="/sync.js"></script>
+  <script type="module" src="/config.js"></script>
+  <script type="module" src="/storage.js"></script>
+  <script type="module" src="/supabase.js"></script>
+  <script type="module" src="/sync.js"></script>
 </body>
 </html>

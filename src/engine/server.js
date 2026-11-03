@@ -277,6 +277,34 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { status: "ok", engine: "AniTAG CloudStream Native 3.0" });
     }
 
+    // Client Configuration Endpoint (/api/config)
+    if (pathname === "/api/config") {
+      return sendJson(res, 200, {
+        apiBaseUrl: process.env.API_BASE_URL || "",
+        supabaseUrl: process.env.SUPABASE_URL || "",
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+        authRedirectUrl: process.env.AUTH_REDIRECT_URL || ""
+      });
+    }
+
+    // Provider Episode List Endpoint (/episodes/:provider/:id)
+    if (pathname.startsWith("/episodes/")) {
+      const parts = pathname.split("/").filter(Boolean);
+      const provider = (parts[1] || "anikoto").toLowerCase();
+      const handler = PROVIDER_ROUTERS[provider] || anikotoHandler;
+      try {
+        const provReq = new Request(`http://localhost${pathname}${parsedUrl.search}`, { method: "GET" });
+        const provRes = await handler.fetch(provReq);
+        if (provRes && provRes.ok) {
+          const provData = await provRes.json();
+          return sendJson(res, 200, provData);
+        }
+      } catch (err) {
+        console.warn(`[Episodes Handler] Provider ${provider} fetch error:`, err.message);
+      }
+      return sendJson(res, 404, { error: `Episode list not found for provider '${provider}'` });
+    }
+
     // Stream Proxy
     if (pathname === "/proxy" || pathname === "/api/proxy") {
       return await serveStreamProxy(req, res, parsedUrl);
