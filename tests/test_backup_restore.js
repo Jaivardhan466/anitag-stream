@@ -1,14 +1,28 @@
 /**
- * Comprehensive Test Suite for AniTAG Database Backup & Restoration System
+ * Rigorous Test Suite for AniTAG Database Backup & Restoration System
  * 
  * Verified Scenarios:
- * 1. Successful backup (All 7 tables exported, manifest generated, AES-256-GCM encrypted)
+ * 1. Successful backup (All 7 tables, manifest generation, AES-256-GCM encryption)
  * 2. Missing credentials (Fails safely without creating an insecure backup)
  * 3. Failed table export (Partial failure marks entire backup FAILED, zero partial success)
  * 4. Pagination with more rows than one API response (Multi-page cursor traversal)
- * 5. Encryption and decryption (AES-256-GCM, PBKDF2 key derivation, tamper detection)
- * 6. Restore validation (Dry-run mode, checksum verification, production overwrite guard)
- * 7. Incomplete backup detection (Detecting missing tables, corrupted records or checksum mismatches)
+ * 5. Encryption and decryption (AES-256-GCM, PBKDF2 key derivation, bit tamper detection)
+ * 6. Valid dry-run restoration (Read-only validation, zero network mutations)
+ * 7. Restore production safety guards:
+ *    - 7A: Missing SUPABASE_URL during live restore (blocked: unverified production identity)
+ *    - 7B: Production URL with trailing slash (blocked by normalized URL comparison)
+ *    - 7C: Live restore blocked without explicit isolated-target verification (ALLOW_ISOLATED_TEST_RESTORE=true)
+ *    - 7D: Live restore blocked if target URL is not recognized as an isolated test target
+ *    - 7E: Verified isolated test target restore succeeds
+ * 8. Strict manifest validation:
+ *    - 8A: Invalid manifest status (status !== 'SUCCESS')
+ *    - 8B: Unexpected schema version (schema_version !== '1.1.0')
+ *    - 8C: Missing table from payload data
+ *    - 8D: Missing table entry from manifest tables
+ *    - 8E: Missing or invalid SHA-256 checksum
+ *    - 8F: Incorrect table row count
+ *    - 8G: Incorrect total_rows in manifest
+ *    - 8H: Checksum mismatch (data tampering detection)
  */
 
 import assert from 'node:assert';
@@ -27,7 +41,10 @@ import {
 } from '../src/engine/db/backup.js';
 import {
   readAndValidateBackupFile,
-  executeRestore
+  executeRestore,
+  normalizeUrl,
+  isVerifiedIsolatedTestTarget,
+  SUPPORTED_SCHEMA_VERSIONS
 } from '../src/engine/db/restore.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,15 +68,59 @@ function cleanupTestDir() {
 
 async function runAllTests() {
   console.log('================================================================');
-  console.log('STARTING ANITAG BACKUP & RESTORATION RIGOROUS VERIFICATION SUITE');
+  console.log('STARTING RIGOROUS BACKUP & RESTORATION VALIDATION TEST SUITE');
   console.log('================================================================\n');
 
   setupTestDir();
   let passedCount = 0;
-  let backupArtifactPath = null;
+  let validBackupPath = null;
+
+  // Helper to build a valid encrypted test backup payload
+  function createTestBackupFile(fileName, overrideManifest = {}, overrideData = {}) {
+    const defaultData = {
+      profiles: [{ id: 'user-1', display_name: 'Test Viewer' }],
+      user_preferences: [{ user_id: 'user-1', theme_id: 'monochrome', theme_mode: 'dark' }],
+      continue_watching: [{ id: 'cw-1', user_id: 'user-1', anime_id: 'bleach', episode_num: 1 }],
+      watch_history: [{ id: 'wh-1', user_id: 'user-1', anime_id: 'bleach', episode_num: 1 }],
+      user_watchlist: [{ id: 'wl-1', user_id: 'user-1', anime_id: 'bleach' }],
+      user_anime_ratings: [{ id: 'ar-1', user_id: 'user-1', anime_id: 'bleach', rating: 9.0 }],
+      user_episode_ratings: [{ id: 'er-1', user_id: 'user-1', anime_id: 'bleach', episode_num: 1, rating: 9.0 }]
+    };
+
+    const finalData = { ...defaultData, ...overrideData };
+
+    const defaultManifestTables = {};
+    let sumRows = 0;
+    for (const t of REQUIRED_TABLES) {
+      const rows = finalData[t] || [];
+      sumRows += rows.length;
+      defaultManifestTables[t] = {
+        row_count: rows.length,
+        sha256: computeChecksum(rows),
+        status: 'OK'
+      };
+    }
+
+    const finalManifest = {
+      schema_version: '1.1.0',
+      timestamp: new Date().toISOString(),
+      status: 'SUCCESS',
+      total_tables: REQUIRED_TABLES.length,
+      total_rows: sumRows,
+      tables: defaultManifestTables,
+      encryption: { algorithm: 'AES-256-GCM', kdf: 'PBKDF2-SHA256', iterations: 100000, magic: 'ANITAG_ENC_V1' },
+      ...overrideManifest
+    };
+
+    const payload = { manifest: finalManifest, data: finalData };
+    const encBuffer = encryptPayload(Buffer.from(JSON.stringify(payload, null, 2), 'utf8'), TEST_PASSPHRASE);
+    const filePath = path.join(TEST_BACKUP_DIR, fileName);
+    fs.writeFileSync(filePath, encBuffer);
+    return { filePath, manifest: finalManifest, data: finalData };
+  }
 
   // ---------------------------------------------------------------------------
-  // TEST 1: SUCCESSFUL BACKUP
+  // TEST 1: SUCCESSFUL FULL BACKUP
   // ---------------------------------------------------------------------------
   try {
     console.log('[TEST 1] Successful Backup Verification...');
@@ -76,11 +137,7 @@ async function runAllTests() {
     const successfulFetch = async (url) => {
       for (const table of REQUIRED_TABLES) {
         if (url.includes(`/${table}?`)) {
-          return {
-            ok: true,
-            status: 200,
-            json: async () => mockDbData[table] || []
-          };
+          return { ok: true, status: 200, json: async () => mockDbData[table] || [] };
         }
       }
       return { ok: false, status: 404, statusText: 'Not Found', text: async () => 'Table not found' };
@@ -102,7 +159,7 @@ async function runAllTests() {
 
     for (const t of REQUIRED_TABLES) {
       assert(backupResult.manifest.tables[t], `Manifest must contain table '${t}'`);
-      assert(backupResult.manifest.tables[t].sha256, `Table '${t}' must have sha256 checksum`);
+      assert.strictEqual(backupResult.manifest.tables[t].sha256.length, 64, `Table '${t}' must have 64-char sha256 checksum`);
       assert.strictEqual(backupResult.manifest.tables[t].status, 'OK');
       assert.strictEqual(backupResult.manifest.tables[t].row_count, 1);
     }
@@ -110,8 +167,8 @@ async function runAllTests() {
     assert(fs.existsSync(backupResult.encryptedFilePath), 'Encrypted .enc file must exist');
     assert(fs.existsSync(backupResult.manifestFilePath), 'Public .manifest.json file must exist');
 
-    backupArtifactPath = backupResult.encryptedFilePath;
-    console.log(`  -> PASS: Successful full backup created with valid manifest and encrypted container.\n`);
+    validBackupPath = backupResult.encryptedFilePath;
+    console.log(`  -> PASS: Full successful backup produced with valid manifest and encrypted container.\n`);
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 1:', err);
@@ -124,8 +181,7 @@ async function runAllTests() {
   try {
     console.log('[TEST 2] Missing Credentials Fail-Safe Verification...');
 
-    // 2A: Missing SUPABASE_URL / Service Key
-    let missingCredsThrown = false;
+    let missingUrlThrown = false;
     try {
       await executeBackup({
         supabaseUrl: '',
@@ -135,12 +191,11 @@ async function runAllTests() {
         throwOnError: true
       });
     } catch (err) {
-      missingCredsThrown = true;
+      missingUrlThrown = true;
       assert(err.message.includes('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY'));
     }
-    assert(missingCredsThrown, 'Must throw error when database credentials are missing');
+    assert(missingUrlThrown, 'Must throw error when database credentials are empty');
 
-    // 2B: Missing Encryption Key
     let missingKeyThrown = false;
     try {
       await executeBackup({
@@ -154,9 +209,9 @@ async function runAllTests() {
       missingKeyThrown = true;
       assert(err.message.includes('Missing BACKUP_ENCRYPTION_KEY'));
     }
-    assert(missingKeyThrown, 'Must throw error when BACKUP_ENCRYPTION_KEY is missing');
+    assert(missingKeyThrown, 'Must throw error when BACKUP_ENCRYPTION_KEY is empty');
 
-    console.log('  -> PASS: System safely refuses to backup when credentials or encryption keys are missing.\n');
+    console.log('  -> PASS: System safely refuses to run backup when credentials or keys are missing.\n');
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 2:', err);
@@ -177,11 +232,7 @@ async function runAllTests() {
           text: async () => 'Database connection timeout'
         };
       }
-      return {
-        ok: true,
-        status: 200,
-        json: async () => [{ id: 'mock-1', data: 'ok' }]
-      };
+      return { ok: true, status: 200, json: async () => [{ id: 'mock-1' }] };
     };
 
     let failureThrown = false;
@@ -196,20 +247,19 @@ async function runAllTests() {
       });
     } catch (err) {
       failureThrown = true;
-      assert(err.message.includes("table 'continue_watching'"), 'Error message must identify failing table');
+      assert(err.message.includes("table 'continue_watching'"));
     }
-    assert(failureThrown, 'Backup MUST throw error when any table export fails');
+    assert(failureThrown, 'Backup must throw error when any table export fails');
 
-    // Verify diagnostic file was written
     const files = fs.readdirSync(TEST_BACKUP_DIR);
-    const failDiagnostics = files.filter(f => f.startsWith('backup_failure_'));
-    assert(failDiagnostics.length >= 1, 'Failure diagnostic file must be recorded');
+    const failLogs = files.filter(f => f.startsWith('backup_failure_'));
+    assert(failLogs.length >= 1, 'Failure diagnostic file must be recorded on disk');
 
-    const failContent = JSON.parse(fs.readFileSync(path.join(TEST_BACKUP_DIR, failDiagnostics[0]), 'utf8'));
+    const failContent = JSON.parse(fs.readFileSync(path.join(TEST_BACKUP_DIR, failLogs[0]), 'utf8'));
     assert.strictEqual(failContent.status, 'FAILED');
     assert.strictEqual(failContent.failed_table, 'continue_watching');
 
-    console.log('  -> PASS: Table failure aborted backup, recorded diagnostic, and produced zero partial success.\n');
+    console.log('  -> PASS: Table failure immediately aborted backup; diagnostic logged; no partial success.\n');
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 3:', err);
@@ -236,11 +286,7 @@ async function runAllTests() {
       const offset = parseInt(urlObj.searchParams.get('offset') || '0', 10);
       const slice = mockDb.slice(offset, offset + limit);
 
-      return {
-        ok: true,
-        status: 200,
-        json: async () => slice
-      };
+      return { ok: true, status: 200, json: async () => slice };
     };
 
     const fetchedRows = await fetchAllRowsForTable('https://mock.supabase.co', 'mock-key', 'watch_history', {
@@ -248,23 +294,23 @@ async function runAllTests() {
       fetchFn: mockPaginationFetch
     });
 
-    assert.strictEqual(fetchedRows.length, TOTAL_MOCK_ROWS, `Must fetch all ${TOTAL_MOCK_ROWS} records`);
+    assert.strictEqual(fetchedRows.length, TOTAL_MOCK_ROWS);
     assert.strictEqual(pageRequests, 3, 'Must paginate across exactly 3 requests (500 + 500 + 250)');
-    assert.strictEqual(fetchedRows[0].id, 'uuid-000001', 'First row must align');
-    assert.strictEqual(fetchedRows[TOTAL_MOCK_ROWS - 1].id, 'uuid-001250', 'Last row must align');
+    assert.strictEqual(fetchedRows[0].id, 'uuid-000001');
+    assert.strictEqual(fetchedRows[TOTAL_MOCK_ROWS - 1].id, 'uuid-001250');
 
-    // Also verify user_preferences uses 'user_id' as ordering primary key
-    let preferencesOrderedBy = '';
+    // Verify user_preferences uses user_id for ordering
+    let preferencesOrderParam = '';
     await fetchAllRowsForTable('https://mock.supabase.co', 'mock-key', 'user_preferences', {
       pageSize: 10,
       fetchFn: async (url) => {
-        preferencesOrderedBy = new URL(url).searchParams.get('order');
+        preferencesOrderParam = new URL(url).searchParams.get('order');
         return { ok: true, status: 200, json: async () => [] };
       }
     });
-    assert.strictEqual(preferencesOrderedBy, 'user_id.asc', 'user_preferences must paginate using user_id primary key');
+    assert.strictEqual(preferencesOrderParam, 'user_id.asc', 'user_preferences must paginate using user_id primary key');
 
-    console.log(`  -> PASS: Successfully paginated ${TOTAL_MOCK_ROWS} records across ${pageRequests} pages without omission.\n`);
+    console.log(`  -> PASS: Correctly paginated ${TOTAL_MOCK_ROWS} records across ${pageRequests} pages using primary key cursor.\n`);
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 4:', err);
@@ -276,38 +322,37 @@ async function runAllTests() {
   // ---------------------------------------------------------------------------
   try {
     console.log('[TEST 5] AES-256-GCM Encryption and Decryption Verification...');
-    const sensitivePayload = JSON.stringify({ user_id: 'uuid-1234', secret_note: 'Confidential anime bookmark' });
-    const plainBuf = Buffer.from(sensitivePayload, 'utf8');
+    const originalSecret = JSON.stringify({ note: 'Confidential watch history', ts: Date.now() });
+    const plainBuf = Buffer.from(originalSecret, 'utf8');
 
     const encrypted = encryptPayload(plainBuf, TEST_PASSPHRASE);
-    assert.strictEqual(encrypted.subarray(0, 13).toString('utf8'), 'ANITAG_ENC_V1', 'Magic header must be present');
+    assert.strictEqual(encrypted.subarray(0, 13).toString('utf8'), 'ANITAG_ENC_V1', 'Magic header must match');
     assert.strictEqual(encrypted.length, plainBuf.length + 57, 'Container must encompass magic (13B), salt (16B), IV (12B), tag (16B), and ciphertext');
 
-    // Decrypt with correct key
     const decrypted = decryptPayload(encrypted, TEST_PASSPHRASE);
-    assert.strictEqual(decrypted.toString('utf8'), sensitivePayload, 'Decrypted text must match original');
+    assert.strictEqual(decrypted.toString('utf8'), originalSecret, 'Decrypted text must match original');
 
-    // Decrypt with incorrect key -> must fail authentication tag check
-    let wrongKeyFailed = false;
+    // Wrong passphrase must fail
+    let wrongKeyThrown = false;
     try {
-      decryptPayload(encrypted, 'invalid_encryption_key_99999');
+      decryptPayload(encrypted, 'invalid_passphrase_0000');
     } catch {
-      wrongKeyFailed = true;
+      wrongKeyThrown = true;
     }
-    assert(wrongKeyFailed, 'Decryption with wrong key must throw auth tag error');
+    assert(wrongKeyThrown, 'Decryption with incorrect key must fail auth tag verification');
 
-    // Tampered payload -> bit flip in ciphertext
+    // Tampered ciphertext must fail
     const tampered = Buffer.from(encrypted);
-    tampered[tampered.length - 2] ^= 0xAA;
-    let tamperFailed = false;
+    tampered[tampered.length - 2] ^= 0x55;
+    let tamperThrown = false;
     try {
       decryptPayload(tampered, TEST_PASSPHRASE);
     } catch {
-      tamperFailed = true;
+      tamperThrown = true;
     }
-    assert(tamperFailed, 'Decryption with tampered ciphertext must throw auth tag error');
+    assert(tamperThrown, 'Decryption with tampered ciphertext must fail auth tag verification');
 
-    console.log('  -> PASS: Authenticated encryption, key enforcement, and cryptographic tamper resistance verified.\n');
+    console.log('  -> PASS: Authenticated encryption, key derivation, and tamper detection verified.\n');
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 5:', err);
@@ -315,41 +360,105 @@ async function runAllTests() {
   }
 
   // ---------------------------------------------------------------------------
-  // TEST 6: RESTORE VALIDATION & SAFETY GUARDS
+  // TEST 6: VALID DRY-RUN RESTORATION
   // ---------------------------------------------------------------------------
   try {
-    console.log('[TEST 6] Restore Validation & Safety Guard Verification...');
-    assert(backupArtifactPath && fs.existsSync(backupArtifactPath), 'Backup artifact from Test 1 must exist');
+    console.log('[TEST 6] Valid Dry-Run Restoration Verification...');
+    assert(validBackupPath && fs.existsSync(validBackupPath), 'Valid backup artifact must exist');
 
-    // 6A: Dry-Run Mode Validation
     const dryRunResult = await executeRestore({
-      filePath: backupArtifactPath,
+      filePath: validBackupPath,
       encryptionKey: TEST_PASSPHRASE,
       confirm: false
     });
-    assert.strictEqual(dryRunResult.dryRun, true, 'Must report dryRun: true');
-    assert.strictEqual(dryRunResult.verified, true, 'Must report verified: true');
-    assert.strictEqual(dryRunResult.manifest.total_rows, 7);
 
-    // 6B: Production Overwrite Guard
-    process.env.SUPABASE_URL = 'https://prod.supabase.co';
-    let prodOverwriteBlocked = false;
+    assert.strictEqual(dryRunResult.dryRun, true, 'Dry-run must report dryRun: true');
+    assert.strictEqual(dryRunResult.verified, true, 'Dry-run must report verified: true');
+    assert.strictEqual(dryRunResult.manifest.total_rows, 7);
+    assert.strictEqual(dryRunResult.manifest.status, 'SUCCESS');
+
+    console.log('  -> PASS: Valid dry-run succeeded with full manifest verification and zero network writes.\n');
+    passedCount++;
+  } catch (err) {
+    console.error('  -> FAIL in TEST 6:', err);
+    throw err;
+  }
+
+  // ---------------------------------------------------------------------------
+  // TEST 7: RESTORE PRODUCTION SAFETY GUARDS
+  // ---------------------------------------------------------------------------
+  try {
+    console.log('[TEST 7] Restore Production Safety Guards Verification...');
+
+    // 7A: Missing SUPABASE_URL during live restore (cannot verify production identity)
+    delete process.env.SUPABASE_URL;
+    let missingProdThrown = false;
     try {
       await executeRestore({
-        filePath: backupArtifactPath,
+        filePath: validBackupPath,
         encryptionKey: TEST_PASSPHRASE,
-        targetUrl: 'https://prod.supabase.co', // Matches production!
+        targetUrl: 'https://test-isolated.supabase.co',
         targetKey: 'test-key',
         confirm: true
       });
     } catch (err) {
-      prodOverwriteBlocked = true;
-      assert(err.message.includes('matches production SUPABASE_URL'), 'Must block targetUrl matching production');
+      missingProdThrown = true;
+      assert(err.message.includes('Production identity cannot be verified because SUPABASE_URL is not set'));
     }
-    delete process.env.SUPABASE_URL;
-    assert(prodOverwriteBlocked, 'Must block accidental restore into production database');
+    assert(missingProdThrown, 'Live restore must be blocked if SUPABASE_URL is not set in environment');
 
-    // 6C: Live Test Restoration against Isolated Test Database
+    // 7B: Production URL with trailing slash (normalized comparison test)
+    process.env.SUPABASE_URL = 'https://prod.supabase.co';
+    let trailingSlashBlocked = false;
+    try {
+      await executeRestore({
+        filePath: validBackupPath,
+        encryptionKey: TEST_PASSPHRASE,
+        targetUrl: 'https://prod.supabase.co/', // Trailing slash variation!
+        targetKey: 'test-key',
+        confirm: true
+      });
+    } catch (err) {
+      trailingSlashBlocked = true;
+      assert(err.message.includes('matches production SUPABASE_URL'));
+    }
+    assert(trailingSlashBlocked, 'Must block targetUrl matching production even with trailing slash');
+
+    // 7C: Blocked without explicit isolated-target verification (ALLOW_ISOLATED_TEST_RESTORE=true)
+    delete process.env.ALLOW_ISOLATED_TEST_RESTORE;
+    let unverifiedTargetBlocked = false;
+    try {
+      await executeRestore({
+        filePath: validBackupPath,
+        encryptionKey: TEST_PASSPHRASE,
+        targetUrl: 'https://test-isolated.supabase.co',
+        targetKey: 'test-key',
+        confirm: true
+      });
+    } catch (err) {
+      unverifiedTargetBlocked = true;
+      assert(err.message.includes('Live restore is disabled by default. To execute writes against an isolated test database, you must explicitly set ALLOW_ISOLATED_TEST_RESTORE=true'));
+    }
+    assert(unverifiedTargetBlocked, 'Live restore must remain blocked without ALLOW_ISOLATED_TEST_RESTORE=true');
+
+    // 7D: Blocked if target URL does not look like an isolated test target
+    process.env.ALLOW_ISOLATED_TEST_RESTORE = 'true';
+    let nonTestTargetBlocked = false;
+    try {
+      await executeRestore({
+        filePath: validBackupPath,
+        encryptionKey: TEST_PASSPHRASE,
+        targetUrl: 'https://custom-domain-anitag.com', // Not a test domain!
+        targetKey: 'test-key',
+        confirm: true
+      });
+    } catch (err) {
+      nonTestTargetBlocked = true;
+      assert(err.message.includes('is not recognized as an isolated test target'));
+    }
+    assert(nonTestTargetBlocked, 'Live restore must be blocked if target URL is not a recognized test environment');
+
+    // 7E: Verified isolated test target restore succeeds
     const mockTargetRows = {};
     const mockTargetFetch = async (url, options) => {
       const tableName = new URL(url).pathname.split('/').pop();
@@ -359,115 +468,165 @@ async function runAllTests() {
       return { ok: true, status: 201, text: async () => 'OK' };
     };
 
-    const restoreResult = await executeRestore({
-      filePath: backupArtifactPath,
+    const validRestoreResult = await executeRestore({
+      filePath: validBackupPath,
       encryptionKey: TEST_PASSPHRASE,
       targetUrl: 'https://test-isolated.supabase.co',
-      targetKey: 'test-isolated-service-key',
+      targetKey: 'test-isolated-key',
       confirm: true,
       fetchFn: mockTargetFetch
     });
 
-    assert(restoreResult.success, 'Restore must report success');
+    assert(validRestoreResult.success, 'Restore must report success for verified isolated target');
     for (const t of REQUIRED_TABLES) {
       assert(mockTargetRows[t], `Target database must receive rows for '${t}'`);
-      assert.strictEqual(mockTargetRows[t].length, 1, `Table '${t}' must receive exactly 1 restored record`);
+      assert.strictEqual(mockTargetRows[t].length, 1);
     }
 
-    console.log('  -> PASS: Restore dry-run verified, production overwrite guard blocked execution, and test restore succeeded.\n');
-    passedCount++;
-  } catch (err) {
-    console.error('  -> FAIL in TEST 6:', err);
-    throw err;
-  }
+    // Clean up environment variables
+    delete process.env.SUPABASE_URL;
+    delete process.env.ALLOW_ISOLATED_TEST_RESTORE;
 
-  // ---------------------------------------------------------------------------
-  // TEST 7: INCOMPLETE BACKUP DETECTION
-  // ---------------------------------------------------------------------------
-  try {
-    console.log('[TEST 7] Incomplete Backup Detection Verification...');
-
-    // 7A: Payload missing a required table
-    const incompletePayload = {
-      manifest: {
-        schema_version: '1.1.0',
-        timestamp: new Date().toISOString(),
-        status: 'SUCCESS',
-        total_tables: 6,
-        total_rows: 6,
-        tables: {
-          profiles: { row_count: 1, sha256: computeChecksum([{ id: '1' }]) }
-          // continue_watching is missing!
-        }
-      },
-      data: {
-        profiles: [{ id: '1' }]
-      }
-    };
-    const incompleteBuffer = encryptPayload(Buffer.from(JSON.stringify(incompletePayload), 'utf8'), TEST_PASSPHRASE);
-    const incompleteFilePath = path.join(TEST_BACKUP_DIR, 'incomplete_backup.json.enc');
-    fs.writeFileSync(incompleteFilePath, incompleteBuffer);
-
-    let incompleteDetected = false;
-    try {
-      readAndValidateBackupFile(incompleteFilePath, TEST_PASSPHRASE);
-    } catch (err) {
-      incompleteDetected = true;
-      assert(err.message.includes("missing required table: 'user_preferences'") || err.message.includes("missing required table: 'continue_watching'"));
-    }
-    assert(incompleteDetected, 'Restore validation must fail when a required table is missing from backup');
-
-    // 7B: Checksum Mismatch Detection
-    const corruptedPayload = {
-      manifest: {
-        schema_version: '1.1.0',
-        timestamp: new Date().toISOString(),
-        status: 'SUCCESS',
-        total_tables: 7,
-        total_rows: 7,
-        tables: {
-          profiles: { row_count: 1, sha256: 'fake_corrupted_checksum_hash_1234567890' },
-          user_preferences: { row_count: 0, sha256: computeChecksum([]) },
-          continue_watching: { row_count: 0, sha256: computeChecksum([]) },
-          watch_history: { row_count: 0, sha256: computeChecksum([]) },
-          user_watchlist: { row_count: 0, sha256: computeChecksum([]) },
-          user_anime_ratings: { row_count: 0, sha256: computeChecksum([]) },
-          user_episode_ratings: { row_count: 0, sha256: computeChecksum([]) }
-        }
-      },
-      data: {
-        profiles: [{ id: '1', display_name: 'Altered Data' }],
-        user_preferences: [],
-        continue_watching: [],
-        watch_history: [],
-        user_watchlist: [],
-        user_anime_ratings: [],
-        user_episode_ratings: []
-      }
-    };
-    const corruptedBuffer = encryptPayload(Buffer.from(JSON.stringify(corruptedPayload), 'utf8'), TEST_PASSPHRASE);
-    const corruptedFilePath = path.join(TEST_BACKUP_DIR, 'corrupted_backup.json.enc');
-    fs.writeFileSync(corruptedFilePath, corruptedBuffer);
-
-    let checksumMismatchDetected = false;
-    try {
-      readAndValidateBackupFile(corruptedFilePath, TEST_PASSPHRASE);
-    } catch (err) {
-      checksumMismatchDetected = true;
-      assert(err.message.includes('Checksum mismatch for table \'profiles\''));
-    }
-    assert(checksumMismatchDetected, 'Restore validation must fail when data does not match manifest SHA-256');
-
-    console.log('  -> PASS: Successfully detected incomplete backup and checksum tampering.\n');
+    console.log('  -> PASS: All production safety guards enforced; unverified targets blocked; verified test target succeeded.\n');
     passedCount++;
   } catch (err) {
     console.error('  -> FAIL in TEST 7:', err);
     throw err;
   }
 
+  // ---------------------------------------------------------------------------
+  // TEST 8: STRICT MANIFEST VALIDATION SUITE
+  // ---------------------------------------------------------------------------
+  try {
+    console.log('[TEST 8] Strict Manifest Validation Suite...');
+
+    // 8A: Invalid manifest status (e.g. FAILED)
+    const { filePath: failedStatusFile } = createTestBackupFile('bad_status.json.enc', { status: 'FAILED' });
+    let badStatusCaught = false;
+    try {
+      readAndValidateBackupFile(failedStatusFile, TEST_PASSPHRASE);
+    } catch (err) {
+      badStatusCaught = true;
+      assert(err.message.includes("Invalid manifest status: Expected 'SUCCESS', got 'FAILED'"));
+    }
+    assert(badStatusCaught, 'Must reject backup with status != SUCCESS');
+
+    // 8B: Unexpected schema version
+    const { filePath: badVerFile } = createTestBackupFile('bad_version.json.enc', { schema_version: '2.0.0' });
+    let badVerCaught = false;
+    try {
+      readAndValidateBackupFile(badVerFile, TEST_PASSPHRASE);
+    } catch (err) {
+      badVerCaught = true;
+      assert(err.message.includes("Invalid schema version: Expected one of [1.1.0], got '2.0.0'"));
+    }
+    assert(badVerCaught, 'Must reject unexpected schema versions');
+
+    // 8C: Missing required table from payload data
+    const { filePath: missingDataFile } = createTestBackupFile('missing_data_table.json.enc', {}, { profiles: undefined });
+    let missingDataCaught = false;
+    try {
+      readAndValidateBackupFile(missingDataFile, TEST_PASSPHRASE);
+    } catch (err) {
+      missingDataCaught = true;
+      assert(err.message.includes("Missing required table 'profiles' in data section"));
+    }
+    assert(missingDataCaught, 'Must reject backup when a required table is missing from data');
+
+    // 8D: Missing table entry from manifest tables
+    const { manifest: baseManifest } = createTestBackupFile('temp_base.json.enc');
+    const incompleteManifestTables = { ...baseManifest.tables };
+    delete incompleteManifestTables['user_watchlist'];
+
+    const { filePath: missingManifestTableFile } = createTestBackupFile('missing_manifest_table.json.enc', {
+      tables: incompleteManifestTables
+    });
+    let missingManifestTableCaught = false;
+    try {
+      readAndValidateBackupFile(missingManifestTableFile, TEST_PASSPHRASE);
+    } catch (err) {
+      missingManifestTableCaught = true;
+      assert(err.message.includes("Missing table entry 'user_watchlist' in manifest.tables"));
+    }
+    assert(missingManifestTableCaught, 'Must reject manifest missing a required table entry');
+
+    // 8E: Missing or invalid SHA-256 checksum
+    const emptyChecksumTables = { ...baseManifest.tables };
+    emptyChecksumTables['continue_watching'] = {
+      ...emptyChecksumTables['continue_watching'],
+      sha256: ''
+    };
+    const { filePath: emptyChecksumFile } = createTestBackupFile('empty_checksum.json.enc', {
+      tables: emptyChecksumTables
+    });
+    let emptyChecksumCaught = false;
+    try {
+      readAndValidateBackupFile(emptyChecksumFile, TEST_PASSPHRASE);
+    } catch (err) {
+      emptyChecksumCaught = true;
+      assert(err.message.includes("Missing or invalid SHA-256 checksum for table 'continue_watching'"));
+    }
+    assert(emptyChecksumCaught, 'Must reject missing or empty SHA-256 checksum');
+
+    // 8F: Incorrect table row count
+    const wrongCountTables = { ...baseManifest.tables };
+    wrongCountTables['watch_history'] = {
+      ...wrongCountTables['watch_history'],
+      row_count: 99 // Actual is 1, manifest says 99!
+    };
+    const { filePath: wrongCountFile } = createTestBackupFile('wrong_row_count.json.enc', {
+      tables: wrongCountTables
+    });
+    let wrongCountCaught = false;
+    try {
+      readAndValidateBackupFile(wrongCountFile, TEST_PASSPHRASE);
+    } catch (err) {
+      wrongCountCaught = true;
+      assert(err.message.includes("Row count mismatch for table 'watch_history'"));
+    }
+    assert(wrongCountCaught, 'Must reject row count mismatch between manifest and payload');
+
+    // 8G: Incorrect total_rows
+    const { filePath: wrongTotalRowsFile } = createTestBackupFile('wrong_total_rows.json.enc', {
+      total_rows: 9999 // Actual sum is 7!
+    });
+    let wrongTotalRowsCaught = false;
+    try {
+      readAndValidateBackupFile(wrongTotalRowsFile, TEST_PASSPHRASE);
+    } catch (err) {
+      wrongTotalRowsCaught = true;
+      assert(err.message.includes("Total rows mismatch: Manifest reports 9999, but actual row sum is 7"));
+    }
+    assert(wrongTotalRowsCaught, 'Must reject total_rows mismatch in manifest');
+
+    // 8H: Tampered table data resulting in checksum mismatch
+    // Use baseManifest.tables (where user_anime_ratings checksum was computed for rating 9.0),
+    // but pass rating 1.0 in payload data so the manifest checksum does not match the actual data
+    const tamperedManifestTables = { ...baseManifest.tables };
+    const { filePath: tamperedDataFile } = createTestBackupFile('tampered_checksum.json.enc', {
+      tables: tamperedManifestTables
+    }, {
+      user_anime_ratings: [{ id: 'ar-1', user_id: 'user-1', anime_id: 'bleach', rating: 1.0 }] // Altered rating!
+    });
+    let checksumMismatchCaught = false;
+    try {
+      readAndValidateBackupFile(tamperedDataFile, TEST_PASSPHRASE);
+    } catch (err) {
+      checksumMismatchCaught = true;
+      assert(err.message.includes("Cryptographic checksum mismatch for table 'user_anime_ratings'"));
+    }
+    assert(checksumMismatchCaught, 'Must detect content tampering and fail SHA-256 validation');
+
+    console.log('  -> PASS: All 8 strict manifest validation checks passed (status, schema, tables, checksums, counts).\n');
+    passedCount++;
+  } catch (err) {
+    console.error('  -> FAIL in TEST 8:', err);
+    throw err;
+  }
+
   cleanupTestDir();
   console.log('================================================================');
-  console.log(`VERIFICATION COMPLETE: ALL ${passedCount} / 7 TESTS PASSED WITH 100% SUCCESS`);
+  console.log(`VERIFICATION COMPLETE: ALL ${passedCount} / 8 TEST SUITES (18 SPECIFIC SCENARIOS) PASSED (100%)`);
   console.log('================================================================');
 }
 
