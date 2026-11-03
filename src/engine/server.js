@@ -317,56 +317,75 @@ const server = http.createServer(async (req, res) => {
       const malId = parsedUrl.searchParams.get("malId") || "";
       const ep = Number(parsedUrl.searchParams.get("ep") || "1");
       const audio = (parsedUrl.searchParams.get("audio") || "sub").toLowerCase() === "dub" ? "dub" : "sub";
-      const provider = (parsedUrl.searchParams.get("provider") || "anikoto").toLowerCase();
+      const requestedProvider = (parsedUrl.searchParams.get("provider") || "animegg").toLowerCase();
 
-      try {
-        const handler = PROVIDER_ROUTERS[provider] || anikotoHandler;
-        const watchPath = `/watch/${provider}/${anilistId || malId}/${audio}/${provider}-${ep}`;
-        const provReq = new Request(`http://localhost${watchPath}`, { method: "GET" });
-        const provRes = await handler.fetch(provReq);
+      // Priority list: try requested provider first, then automatically fall back to reliable providers
+      const candidates = [requestedProvider];
+      if (requestedProvider !== "animegg") candidates.push("animegg");
+      if (requestedProvider !== "2dhive") candidates.push("2dhive");
+      if (requestedProvider !== "anikoto") candidates.push("anikoto");
 
-        if (provRes && provRes.ok) {
-          const provData = await provRes.json();
-          const rawStreams = provData.streams || [];
-          const subtitles = provData.subtitles || [];
+      for (const prov of candidates) {
+        try {
+          const handler = PROVIDER_ROUTERS[prov];
+          if (!handler) continue;
+          const targetId = anilistId || malId;
+          const watchPath = `/watch/${prov}/${targetId}/${audio}/${prov}-${ep}`;
+          const provReq = new Request(`http://localhost${watchPath}`, { method: "GET" });
 
-          const formatted = rawStreams.map((s, idx) => {
-            const rawUrl = s.url || "";
-            const isM3u8 = rawUrl.includes(".m3u8") || s.type === "hls";
-            const needsProxy = isM3u8 || s.referer || rawUrl.includes("mcloud") || rawUrl.includes("rapid");
-            return {
-              id: `${provider}-${idx}`,
-              server: s.server || `${provider.toUpperCase()} Server ${idx + 1}`,
-              quality: s.quality || "1080p Direct",
-              type: isM3u8 ? "hls" : "mp4",
-              url: needsProxy ? `/proxy?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent(s.referer || "")}` : rawUrl,
-              rawUrl,
-              subtitles
-            };
-          });
+          // Enforce adaptive timeout per provider (14s for scraping engine, 4s for direct APIs)
+          const provTimeout = prov === "animegg" ? 14000 : 4000;
+          const handlerPromise = handler.fetch(provReq);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Provider '${prov}' resolution timeout`)), provTimeout)
+          );
+          const provRes = await Promise.race([handlerPromise, timeoutPromise]);
 
-          return sendJson(res, 200, {
-            provider,
-            animeId,
-            episode: ep,
-            audio,
-            streams: formatted,
-            subtitles
-          });
+          if (provRes && provRes.ok) {
+            const provData = await provRes.json();
+            const rawStreams = provData.streams || [];
+            if (rawStreams.length > 0) {
+              const subtitles = provData.subtitles || [];
+              const formatted = rawStreams.map((s, idx) => {
+                const rawUrl = s.url || "";
+                const isM3u8 = rawUrl.includes(".m3u8") || s.type === "hls";
+                const isEmbed = s.type === "embed" || rawUrl.includes("/embed/");
+                const needsProxy = !isEmbed && (isM3u8 || s.referer || rawUrl.includes("mcloud") || rawUrl.includes("rapid"));
+                return {
+                  id: `${prov}-${idx}`,
+                  server: s.server || `${prov.toUpperCase()} Server ${idx + 1}`,
+                  quality: s.quality || "1080p Direct",
+                  type: isEmbed ? "embed" : (isM3u8 ? "hls" : "mp4"),
+                  url: needsProxy ? `/proxy?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent(s.referer || "")}` : rawUrl,
+                  rawUrl,
+                  subtitles
+                };
+              });
+
+              return sendJson(res, 200, {
+                provider: prov,
+                animeId,
+                episode: ep,
+                audio,
+                streams: formatted,
+                subtitles
+              });
+            }
+          }
+        } catch (err) {
+          console.warn(`[Stream Resolver] Provider ${prov} error:`, err.message);
         }
-      } catch (err) {
-        console.warn(`[Stream Resolver] Provider ${provider} direct fetch fallback:`, err.message);
       }
 
-      // Honest Provider Response: If no verified streams could be resolved, return empty list
+      // Honest fallback: if all providers fail, return empty list cleanly
       return sendJson(res, 200, {
-        provider,
+        provider: requestedProvider,
         animeId,
         episode: ep,
         audio,
         streams: [],
         subtitles: [],
-        error: "No verified stream available for this episode on " + provider.toUpperCase()
+        error: `No verified streams available for Episode ${ep} on ${requestedProvider.toUpperCase()}`
       });
     }
 
@@ -395,6 +414,18 @@ const server = http.createServer(async (req, res) => {
 
 // Attach Native RFC-6455 WebSocket Upgrade Handler
 server.on("upgrade", handleWsUpgrade);
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n[Server Fatal] Port ${PORT} is already in use by another running process.`);
+    console.error(`To release port ${PORT}, run:`);
+    console.error(`  PowerShell: Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force`);
+    console.error(`  Or launch with another port: $env:PORT="${PORT + 1}"; npm start\n`);
+  } else {
+    console.error("[Server Fatal] Server listen error:", err);
+  }
+  process.exit(1);
+});
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`\n=======================================================`);

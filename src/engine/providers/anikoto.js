@@ -16,26 +16,38 @@ function normalize(s) {
   return (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-async function httpGet(url, headers = {}) {
-  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html,*/*", ...headers } });
-  if (!res.ok) {
-    const _raw = await res.text().catch(() => null);
-    const _e = new Error(`HTTP ${res.status} fetching ${url}`);
-    _e.rawBody = _raw;
-    throw _e;
+async function httpGet(url, headers = {}, timeoutMs = 4500) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html,*/*", ...headers }, signal: ctrl.signal });
+    if (!res.ok) {
+      const _raw = await res.text().catch(() => null);
+      const _e = new Error(`HTTP ${res.status} fetching ${url}`);
+      _e.rawBody = _raw;
+      throw _e;
+    }
+    return await res.text();
+  } finally {
+    clearTimeout(t);
   }
-  return res.text();
 }
 
-async function getJSON(url, headers = {}) {
-  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json,*/*", ...headers } });
-  if (!res.ok) {
-    const _raw = await res.text().catch(() => null);
-    const _e = new Error(`HTTP ${res.status} fetching ${url}`);
-    _e.rawBody = _raw;
-    throw _e;
+async function getJSON(url, headers = {}, timeoutMs = 4500) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json,*/*", ...headers }, signal: ctrl.signal });
+    if (!res.ok) {
+      const _raw = await res.text().catch(() => null);
+      const _e = new Error(`HTTP ${res.status} fetching ${url}`);
+      _e.rawBody = _raw;
+      throw _e;
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(t);
   }
-  return res.json();
 }
 
 const MODIFIERS = [
@@ -306,9 +318,9 @@ async function handleWatch(anilistId, audio, epNum, ctx = {}) {
     getJSON(`${ANIKOTO}/ajax/server/list?servers=${encodeURIComponent(targetEp.ids)}`, {
       "X-Requested-With": "XMLHttpRequest",
       Referer: `${ANIKOTO}/`
-    }),
+    }, 3500),
     (targetEp.mal && targetEp.slug && targetEp.timestamp)
-      ? getJSON(`${MAPPER}/${targetEp.mal}/${targetEp.slug}/${targetEp.timestamp}`, { Referer: `${ANIKOTO}/` })
+      ? getJSON(`${MAPPER}/${targetEp.mal}/${targetEp.slug}/${targetEp.timestamp}`, { Referer: `${ANIKOTO}/` }, 1000)
       : Promise.resolve(null)
   ]);
 

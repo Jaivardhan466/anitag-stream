@@ -1284,12 +1284,12 @@
 
               <!-- Anivexa Multi-Provider Server Selector (Anikoto / AnimeGG / AniBD / 2DHiVE / Mkissa / VidLink) -->
               <div class="flex flex-wrap items-center kage-pill rounded-full p-0.5 text-xs gap-0.5">
-                <button data-server="anikoto" class="server-pill-btn px-3 py-1 rounded-full font-bold accent-fill transition-all flex items-center gap-1.5" title="Anikoto Official API (Ad-Blocked Sub/Dub Stream)">
+                <button data-server="animegg" class="server-pill-btn px-3 py-1 rounded-full font-bold accent-fill transition-all flex items-center gap-1.5" title="AnimeGG Fast Stream Server">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                  <span>Anikoto</span>
-                </button>
-                <button data-server="animegg" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="AnimeGG Fast Stream Server">
                   <span>AnimeGG</span>
+                </button>
+                <button data-server="anikoto" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="Anikoto Official API (Ad-Blocked Sub/Dub Stream)">
+                  <span>Anikoto</span>
                 </button>
                 <button data-server="anibd" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="AniBD Direct HLS/MP4 Server">
                   <span>AniBD</span>
@@ -4295,7 +4295,7 @@
     let activeStreamIndex = 0;
     let streamStallTimeout = null;
     let currentLoadToken = 0;
-    state.activeServer = 'anikoto';
+    state.activeServer = 'animegg';
 
     function setBufferingUI(isBuffering, statusText = 'Loading Ad-Free HD Stream...') {
       const overlay = document.getElementById('videoBufferingOverlay');
@@ -4369,39 +4369,39 @@
     }
 
     // Verified Full-Episode Cloud Players (Sandboxed & Ad-Blocked — Zero 90-second opening clips)
-    function getVerifiedFullEpisodeEmbeds(anime, episodeNum, preferredProvider = 'anikoto') {
+    function getVerifiedFullEpisodeEmbeds(anime, episodeNum, preferredProvider = 'animegg') {
       const ext = getAnimeExtras(anime);
       const malId = state.activeSeasonMalId || ext.malId || 21;
       const anilistId = state.activeSeasonAnilistId || ext.anilistId || 21;
       const subOrDub = state.audioMode === 'DUB' ? 'dub' : 'sub';
       const upperMode = subOrDub.toUpperCase();
 
-      const megaPlaySource = {
-        server: `MegaPlay HD (${upperMode})`,
-        type: 'embed',
-        url: `https://megaplay.buzz/stream/mal/${malId}/${episodeNum}/${subOrDub}`
-      };
-      const vidSrcCcSource = {
-        server: `VidSrc CC HD (${upperMode})`,
-        type: 'embed',
-        url: `https://vidsrc.cc/v2/embed/anime/ani${anilistId}/${episodeNum}/${subOrDub}?autoPlay=true`
-      };
       const vidLinkSource = {
         server: `VidLink Cloud HD (${upperMode})`,
         type: 'embed',
         url: `https://vidlink.pro/anime/${malId}/${episodeNum}/${subOrDub}?fallback=true&autoplay=true&primaryColor=E8C36A`
       };
-
-      const providerOrderMap = {
-        anikoto: [megaPlaySource, vidSrcCcSource, vidLinkSource],
-        '2dhive': [megaPlaySource, vidSrcCcSource, vidLinkSource],
-        animegg: [vidSrcCcSource, megaPlaySource, vidLinkSource],
-        anibd: [megaPlaySource, vidLinkSource, vidSrcCcSource],
-        mkissa: [megaPlaySource, vidSrcCcSource, vidLinkSource],
-        vidlink: [vidLinkSource, megaPlaySource, vidSrcCcSource]
+      const megaPlaySource = {
+        server: `MegaPlay HD (${upperMode})`,
+        type: 'embed',
+        url: `https://megaplay.buzz/stream/mal/${malId}/${episodeNum}/${subOrDub}`
+      };
+      const babaStreamSource = {
+        server: `BabaStream Cloud (${upperMode})`,
+        type: 'embed',
+        url: `https://babastream.top/embed/${malId}/${episodeNum}/${subOrDub}`
       };
 
-      const ordered = providerOrderMap[preferredProvider] || [megaPlaySource, vidSrcCcSource, vidLinkSource];
+      const providerOrderMap = {
+        vidlink: [vidLinkSource, megaPlaySource, babaStreamSource],
+        animegg: [vidLinkSource, megaPlaySource, babaStreamSource],
+        anikoto: [vidLinkSource, megaPlaySource, babaStreamSource],
+        '2dhive': [babaStreamSource, vidLinkSource, megaPlaySource],
+        anibd: [vidLinkSource, megaPlaySource, babaStreamSource],
+        mkissa: [vidLinkSource, megaPlaySource, babaStreamSource]
+      };
+
+      const ordered = providerOrderMap[preferredProvider] || [vidLinkSource, megaPlaySource, babaStreamSource];
       const list = [...ordered];
 
       // Only add Archive.org 24m Direct MP4 when watching Black Clover episodes 52..170 (where exact full episodes exist)
@@ -4560,7 +4560,7 @@
       const anilistId = state.activeSeasonAnilistId || ext.anilistId || 21;
       const malId = state.activeSeasonMalId || ext.malId || 21;
       const audioLower = state.audioMode.toLowerCase();
-      const provider = (state.activeServer || 'anikoto').toLowerCase();
+      const provider = (state.activeServer || 'animegg').toLowerCase();
 
       const verifiedFallbacks = getVerifiedFullEpisodeEmbeds(anime, episodeNum, provider);
 
@@ -4587,7 +4587,7 @@
 
       try {
         const ctrl = new AbortController();
-        const tId = setTimeout(() => ctrl.abort(), 9500);
+        const tId = setTimeout(() => ctrl.abort(), 14000);
         const resp = await fetch(
           `${getApiBaseUrl()}/api/stream?provider=${encodeURIComponent(provider)}&animeId=${encodeURIComponent(anime.id)}&anilistId=${anilistId}&malId=${malId}&title=${encodeURIComponent(anime.titleEn)}&ep=${episodeNum}&audio=${audioLower}`,
           { signal: ctrl.signal }
@@ -6360,9 +6360,9 @@
       }
     });
   </script>
-  <script type="module" src="/config.js"></script>
-  <script type="module" src="/storage.js"></script>
-  <script type="module" src="/supabase.js"></script>
-  <script type="module" src="/sync.js"></script>
+  <script type="module" src="./config.js"></script>
+  <script type="module" src="./storage.js"></script>
+  <script type="module" src="./supabase.js"></script>
+  <script type="module" src="./sync.js"></script>
 </body>
 </html>
