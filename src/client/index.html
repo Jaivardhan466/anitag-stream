@@ -849,6 +849,25 @@
             <span id="streamStatusSubtext" class="mt-2 text-[11px] font-semibold text-white px-2.5 py-0.5 rounded-full bg-black/70">Loading HD Anime Stream...</span>
           </div>
 
+          <!-- Honest Stream Error Overlay (Clean fallback with provider picker & retry) -->
+          <div id="videoErrorOverlay" class="hidden absolute inset-0 z-30 flex flex-col items-center justify-center p-6 bg-black/85 backdrop-blur-md text-center">
+            <div class="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mb-3">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <h3 class="text-base font-bold text-white mb-1">Stream Unavailable on Current Server</h3>
+            <p id="videoErrorMessage" class="text-xs text-neutral-300 max-w-md mb-4">The current stream mirror could not be reached or is temporarily offline. Please select another provider or retry.</p>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <button id="retryCurrentEpisodeBtn" class="px-4 py-2 rounded-xl accent-fill text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg active:scale-95">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                <span>Retry Episode</span>
+              </button>
+              <button id="switchServerQuickBtn" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all flex items-center gap-1.5 border border-white/15 active:scale-95">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                <span>Switch Provider</span>
+              </button>
+            </div>
+          </div>
+
           <!-- 1-Tap Unmute Pill (shown only if mobile browser auto-starts muted) -->
           <button id="mobileAutoUnmuteBtn" class="hidden absolute top-11 left-3 sm:left-5 z-30 px-3 py-1 rounded-full accent-fill text-[11px] font-bold flex items-center gap-1.5 shadow-lg">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
@@ -1224,7 +1243,7 @@
               <img id="watchSeriesAvatar" src="https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97940-fyh8o7gNbha0.png" alt="" class="w-10 h-10 rounded-full object-cover border border-white/10" />
               <div>
                 <div id="watchSeriesName" class="text-sm font-bold text-white">Black Clover</div>
-                <div class="text-[11px] text-neutral-400">44.9K users watching • Zero Ads</div>
+                <div id="watchSeriesSubMeta" class="text-[11px] text-neutral-400">Official Stream • Zero Ads</div>
               </div>
               <button id="watchAddToListBtn" class="ml-2 px-4 py-1.5 rounded-full accent-fill text-xs font-bold transition-all flex items-center gap-1.5">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
@@ -1232,16 +1251,16 @@
               </button>
             </div>
 
-            <!-- Action Control Pills (Like/Dislike, Sub/Dub, Koto Server — Linear Icons) -->
+            <!-- Action Control Pills (Episode Rating, Sub/Dub, Koto Server — Linear Icons) -->
             <div class="flex flex-wrap items-center gap-2">
-              <div class="flex items-center kage-pill rounded-full overflow-hidden text-xs">
-                <button id="likeEpisodeBtn" class="px-3 py-1.5 hover:bg-white/10 flex items-center gap-1.5 text-neutral-200">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-                  <span id="likeCountSpan" class="tabular-nums">142</span>
+              <div id="episodeRatingGroup" class="flex items-center kage-pill rounded-full overflow-hidden text-xs">
+                <button id="likeEpisodeBtn" class="px-3 py-1.5 hover:bg-white/10 flex items-center gap-1.5 text-neutral-200 transition-colors" title="Rate this episode">
+                  <svg id="likeEpisodeIconSvg" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                  <span id="likeEpisodeLabel" class="font-medium">Like</span>
                 </button>
                 <div class="w-[1px] h-4 bg-white/10"></div>
-                <button id="dislikeEpisodeBtn" class="px-2.5 py-1.5 hover:bg-white/10 text-neutral-400">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+                <button id="dislikeEpisodeBtn" class="px-2.5 py-1.5 hover:bg-white/10 text-neutral-400 transition-colors" title="Dislike this episode">
+                  <svg id="dislikeEpisodeIconSvg" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
                 </button>
               </div>
 
@@ -2396,7 +2415,7 @@
       'slime-s4': { anilistId: 156822, malId: 53580, studio: '8bit', duration: '24 min / ep', season: 'Spring 2024', palette: ['#38bdf8', '#0c4a6e'] },
       'blue-box-s2': { anilistId: 170942, malId: 57181, studio: 'Telecom Animation Film', duration: '24 min / ep', season: 'Fall 2024', palette: ['#60a5fa', '#172554'] },
       'solo-leveling': { anilistId: 151807, malId: 52299, studio: 'A-1 Pictures', duration: '24 min / ep', season: 'Winter 2024', palette: ['#3b82f6', '#090d16'] },
-      'overgeared': { anilistId: 0, malId: 52299, studio: 'REDICE × Studio Mir', duration: '24 min / ep', season: 'Winter 2026', palette: ['#ea580c', '#1c1917'] },
+      'overgeared': { anilistId: 0, malId: null, studio: 'REDICE × Studio Mir', duration: '24 min / ep', season: 'Winter 2026', palette: ['#ea580c', '#1c1917'] },
       'smoking-supermarket': { anilistId: 162804, malId: 55973, studio: 'Asahi Production', duration: '24 min / ep', season: 'Summer 2026', palette: ['#ec4899', '#1f122b'] },
       'inept-villainess': { anilistId: 166216, malId: 56524, studio: 'Doga Kobo', duration: '24 min / ep', season: 'Spring 2026', palette: ['#f43f5e', '#1c1917'] }
     };
@@ -4245,9 +4264,9 @@
       'slime-s4': 'tensei-shitara-slime-datta-ken-3rd-season',
       'blue-box-s2': 'ao-no-hako',
       'solo-leveling': 'ore-dake-level-up-na-ken',
-      'overgeared': 'ore-dake-level-up-na-ken',
+      'overgeared': 'overgeared',
       'smoking-supermarket': 'super-no-ura-de-yani-suu-futari',
-      'inept-villainess': 'kusuriya-no-hitorigoto'
+      'inept-villainess': 'inept-villainess'
     };
 
     let hlsInstance = null;
@@ -4418,12 +4437,28 @@
       }).join('');
     }
 
+    function showStreamErrorOverlay(message) {
+      const overlay = document.getElementById('videoErrorOverlay');
+      const msgEl = document.getElementById('videoErrorMessage');
+      if (overlay) {
+        if (msgEl && message) msgEl.textContent = message;
+        overlay.classList.remove('hidden');
+      }
+      setNativePlayerOverlaysVisible(false);
+    }
+
+    function hideStreamErrorOverlay() {
+      const overlay = document.getElementById('videoErrorOverlay');
+      if (overlay) overlay.classList.add('hidden');
+    }
+
     function playStreamSourceObject(sourceObj) {
       if (!sourceObj || !sourceObj.url) {
         tryNextStreamInQueue();
         return;
       }
       clearTimeout(streamStallTimeout);
+      hideStreamErrorOverlay();
       renderMirrorSelectorDropdown();
 
       const embedFrame = document.getElementById('cloudEpisodeEmbedFrame');
@@ -4508,6 +4543,7 @@
         playStreamSourceObject(nextSource);
       } else {
         setBufferingUI(false);
+        showStreamErrorOverlay(`All streams for Episode ${state.activeEpisode} on ${(state.activeServer || 'Current Provider').toUpperCase()} could not be loaded. Please switch to another provider or retry.`);
       }
     }
 
@@ -4515,6 +4551,7 @@
       if (!anime) return;
       const myToken = ++currentLoadToken;
       clearTimeout(streamStallTimeout);
+      hideStreamErrorOverlay();
       nativeVideo.poster = getBannerUrl(anime);
       state.duration = 1441;
       updateTimelineUI();
@@ -4616,8 +4653,78 @@
         return true;
       });
 
+      if (activeStreamQueue.length === 0) {
+        setBufferingUI(false);
+        showStreamErrorOverlay(`No streaming mirrors found for Episode ${episodeNum} on ${provider.toUpperCase()}. Please switch to another provider.`);
+        return;
+      }
+
       activeStreamIndex = 0;
       playStreamSourceObject(activeStreamQueue[0]);
+    }
+
+    // Authentic Episode Rating System (Local Storage + Supabase Cloud Sync)
+    function getEpisodeRating(animeId, epNum) {
+      try {
+        const store = JSON.parse(localStorage.getItem('anitag_episode_ratings_v1') || '{}');
+        return store[`${animeId}_${epNum}`] !== undefined ? store[`${animeId}_${epNum}`] : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function saveEpisodeRating(animeId, epNum, ratingVal) {
+      try {
+        const store = JSON.parse(localStorage.getItem('anitag_episode_ratings_v1') || '{}');
+        const key = `${animeId}_${epNum}`;
+        if (ratingVal === null) {
+          delete store[key];
+        } else {
+          store[key] = ratingVal;
+        }
+        localStorage.setItem('anitag_episode_ratings_v1', JSON.stringify(store));
+      } catch (e) {}
+
+      if (window.aniTagCloud && typeof window.aniTagCloud.pushRating === 'function') {
+        window.aniTagCloud.pushRating(animeId, ratingVal !== null ? ratingVal : 0, epNum);
+      }
+    }
+
+    function updateEpisodeRatingUI(animeId, epNum) {
+      const rating = getEpisodeRating(animeId, epNum);
+      const likeBtn = document.getElementById('likeEpisodeBtn');
+      const dislikeBtn = document.getElementById('dislikeEpisodeBtn');
+      const label = document.getElementById('likeEpisodeLabel');
+      const likeSvg = document.getElementById('likeEpisodeIconSvg');
+      const dislikeSvg = document.getElementById('dislikeEpisodeIconSvg');
+
+      if (!likeBtn || !dislikeBtn) return;
+
+      if (rating === 1) { // Liked
+        likeBtn.classList.add('accent-fill', 'text-white');
+        likeBtn.classList.remove('text-neutral-200');
+        if (label) label.textContent = 'Liked';
+        if (likeSvg) likeSvg.setAttribute('fill', 'currentColor');
+        dislikeBtn.classList.remove('bg-white/10', 'text-white');
+        dislikeBtn.classList.add('text-neutral-400');
+        if (dislikeSvg) dislikeSvg.setAttribute('fill', 'none');
+      } else if (rating === -1) { // Disliked
+        likeBtn.classList.remove('accent-fill', 'text-white');
+        likeBtn.classList.add('text-neutral-200');
+        if (label) label.textContent = 'Like';
+        if (likeSvg) likeSvg.setAttribute('fill', 'none');
+        dislikeBtn.classList.add('bg-white/10', 'text-white');
+        dislikeBtn.classList.remove('text-neutral-400');
+        if (dislikeSvg) dislikeSvg.setAttribute('fill', 'currentColor');
+      } else { // Unrated
+        likeBtn.classList.remove('accent-fill', 'text-white');
+        likeBtn.classList.add('text-neutral-200');
+        if (label) label.textContent = 'Like';
+        if (likeSvg) likeSvg.setAttribute('fill', 'none');
+        dislikeBtn.classList.remove('bg-white/10', 'text-white');
+        dislikeBtn.classList.add('text-neutral-400');
+        if (dislikeSvg) dislikeSvg.setAttribute('fill', 'none');
+      }
     }
 
     function populateWatchPageDetails(anime, episodeNum) {
@@ -4626,6 +4733,16 @@
       document.getElementById('playerEpisodePill').textContent = `EP ${episodeNum} • ${state.audioMode}`;
       document.getElementById('watchEpisodeHeading').textContent = `${getTitle(anime)} — Episode ${episodeNum}: ${getEpisodeTitle(anime, episodeNum)}`;
       document.getElementById('watchSeriesName').textContent = getTitle(anime);
+
+      const subMeta = document.getElementById('watchSeriesSubMeta');
+      if (subMeta) {
+        const parts = [];
+        if (extras.studio) parts.push(extras.studio);
+        if (anime.status) parts.push(anime.status);
+        if (anime.score != null) parts.push(`★ ${anime.score.toFixed(1)}`);
+        subMeta.textContent = parts.length ? parts.join(' • ') : 'Official Stream • Zero Ads';
+      }
+      updateEpisodeRatingUI(anime.id, episodeNum);
 
       const avatar = document.getElementById('watchSeriesAvatar');
       if (avatar) {
@@ -4916,6 +5033,20 @@
       }
     });
 
+    // Windows Desktop Native Hardware Media Keys Bridge (Play/Pause, Next, Prev)
+    if (window.desktopAPI && typeof window.desktopAPI.onMediaKey === 'function') {
+      window.desktopAPI.onMediaKey((command) => {
+        console.log('[Desktop Hardware Media Key]', command);
+        if (command === 'TOGGLE_PLAY') {
+          togglePlayPause();
+        } else if (command === 'NEXT_EPISODE') {
+          goNextEpisode();
+        } else if (command === 'PREV_EPISODE') {
+          goPrevEpisode();
+        }
+      });
+    }
+
     // -----------------------------------------------------------------------
     // EVENT LISTENERS
     // -----------------------------------------------------------------------
@@ -5135,7 +5266,7 @@
                   format: m.format || 'TV',
                   score: m.averageScore ? Number((m.averageScore / 10).toFixed(1)) : null,
                   sub: totalEps,
-                  dub: totalEps,
+                  dub: 0,
                   total: totalEps,
                   status: m.status === 'RELEASING' ? 'Airing' : 'Completed',
                   trendingRank: 99,
@@ -5447,13 +5578,43 @@
     });
 
     document.getElementById('likeEpisodeBtn').addEventListener('click', () => {
-      state.liked = !state.liked;
-      state.likes += state.liked ? 1 : -1;
-      document.getElementById('likeCountSpan').textContent = state.likes;
+      const animeId = state.activeAnime ? state.activeAnime.id : 'default';
+      const epNum = state.activeEpisode || 1;
+      const current = getEpisodeRating(animeId, epNum);
+      const newVal = current === 1 ? null : 1;
+      saveEpisodeRating(animeId, epNum, newVal);
+      updateEpisodeRatingUI(animeId, epNum);
+      showToast(newVal === 1 ? 'Added to liked episodes' : 'Rating removed');
     });
+
     document.getElementById('dislikeEpisodeBtn').addEventListener('click', () => {
-      showToast('Feedback recorded');
+      const animeId = state.activeAnime ? state.activeAnime.id : 'default';
+      const epNum = state.activeEpisode || 1;
+      const current = getEpisodeRating(animeId, epNum);
+      const newVal = current === -1 ? null : -1;
+      saveEpisodeRating(animeId, epNum, newVal);
+      updateEpisodeRatingUI(animeId, epNum);
+      showToast(newVal === -1 ? 'Disliked episode' : 'Rating removed');
     });
+
+    const retryEpBtn = document.getElementById('retryCurrentEpisodeBtn');
+    if (retryEpBtn) {
+      retryEpBtn.addEventListener('click', () => {
+        hideStreamErrorOverlay();
+        loadBuiltInEpisodeStream(state.activeAnime, state.activeEpisode);
+      });
+    }
+
+    const switchServerBtn = document.getElementById('switchServerQuickBtn');
+    if (switchServerBtn) {
+      const PROVIDER_LIST = ['anikoto', 'animegg', 'anibd', '2dhive', 'mkissa', 'reanime', 'anineko', 'senshi', 'vidlink'];
+      switchServerBtn.addEventListener('click', () => {
+        hideStreamErrorOverlay();
+        const currentIdx = PROVIDER_LIST.indexOf((state.activeServer || 'anikoto').toLowerCase());
+        const nextServer = PROVIDER_LIST[(currentIdx + 1) % PROVIDER_LIST.length];
+        switchServer(nextServer);
+      });
+    }
 
     document.getElementById('toggleTheaterBtn').addEventListener('click', () => {
       state.theaterMode = !state.theaterMode;
@@ -5825,18 +5986,23 @@
       subsTabCcOffBtn.addEventListener('click', () => setCaptionsEnabled(false));
     }
 
+    function switchServer(serverName) {
+      state.activeServer = (serverName || 'anikoto').toLowerCase();
+      document.querySelectorAll('.server-pill-btn').forEach(b => {
+        const isMatch = (b.dataset.server || '').toLowerCase() === state.activeServer;
+        b.className = isMatch
+          ? 'server-pill-btn px-3 py-1 rounded-full font-bold accent-fill transition-all flex items-center gap-1.5'
+          : 'server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1';
+      });
+      if (state.playerOpen) {
+        loadBuiltInEpisodeStream(state.activeAnime, state.activeEpisode);
+      }
+      showToast(`Streaming Server: ${state.activeServer.toUpperCase()}`);
+    }
+
     document.querySelectorAll('.server-pill-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        state.activeServer = btn.dataset.server || 'anikoto';
-        document.querySelectorAll('.server-pill-btn').forEach(b => {
-          b.className = b === btn
-            ? 'server-pill-btn px-3 py-1 rounded-full font-bold accent-fill transition-all flex items-center gap-1.5'
-            : 'server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1';
-        });
-        if (state.playerOpen) {
-          loadBuiltInEpisodeStream(state.activeAnime, state.activeEpisode);
-        }
-        showToast(`Streaming Server: ${state.activeServer.toUpperCase()}`);
+        switchServer(btn.dataset.server || 'anikoto');
       });
     });
 

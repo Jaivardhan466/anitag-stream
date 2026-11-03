@@ -8,6 +8,7 @@ import { app, BrowserWindow, globalShortcut, ipcMain, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fork } from "node:child_process";
+import http from "node:http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +16,51 @@ const __dirname = path.dirname(__filename);
 let mainWindow = null;
 let engineProcess = null;
 const SERVER_PORT = 4000;
+
+function pollServerUntilReady(port, onReady, maxRetries = 60, intervalMs = 250) {
+  let attempts = 0;
+  let finished = false;
+
+  const trigger = () => {
+    if (!finished) {
+      finished = true;
+      onReady();
+    }
+  };
+
+  const check = () => {
+    if (finished) return;
+    attempts++;
+    const req = http.get(`http://127.0.0.1:${port}/healthz`, (res) => {
+      if (res.statusCode >= 200 && res.statusCode < 400) {
+        trigger();
+      } else if (attempts < maxRetries) {
+        setTimeout(check, intervalMs);
+      } else {
+        trigger();
+      }
+    });
+
+    req.on("error", () => {
+      if (attempts < maxRetries) {
+        setTimeout(check, intervalMs);
+      } else {
+        trigger();
+      }
+    });
+
+    req.setTimeout(500, () => {
+      req.destroy();
+      if (attempts < maxRetries) {
+        setTimeout(check, intervalMs);
+      } else {
+        trigger();
+      }
+    });
+  };
+
+  check();
+}
 
 function startLocalStreamingEngine() {
   const serverPath = path.resolve(__dirname, "../engine/server.js");
@@ -48,24 +94,57 @@ function createWindow() {
     }
   });
 
-  // Strict Zero-Popup & Zero-Redirect Security on Windows
+  // Strict Zero-Popup & Zero-Redirect Security on Windows with OAuth external delegation
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    console.warn("[Windows Shield] Blocked popup window request to:", url);
+    try {
+      const parsed = new URL(url);
+      if (
+        parsed.hostname === "accounts.google.com" ||
+        parsed.hostname.endsWith(".supabase.co") ||
+        parsed.hostname.includes("google") ||
+        parsed.hostname === "github.com"
+      ) {
+        shell.openExternal(url);
+      } else {
+        console.warn("[Windows Shield] Blocked untrusted popup window request to:", url);
+      }
+    } catch (e) {
+      console.warn("[Windows Shield] Malformed window open URL:", url);
+    }
     return { action: "deny" };
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    const parsed = new URL(url);
-    if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+        return; // Allow local streaming UI navigation
+      }
+
       event.preventDefault();
-      console.warn("[Windows Shield] Blocked external navigation to:", url);
+      if (
+        parsed.hostname === "accounts.google.com" ||
+        parsed.hostname.endsWith(".supabase.co") ||
+        parsed.hostname.includes("google") ||
+        parsed.hostname === "github.com"
+      ) {
+        console.log("[Windows Shield] Delegating OAuth navigation to system browser:", url);
+        shell.openExternal(url);
+      } else {
+        console.warn("[Windows Shield] Blocked external navigation to:", url);
+      }
+    } catch (e) {
+      event.preventDefault();
+      console.warn("[Windows Shield] Invalid navigation URL:", url);
     }
   });
 
-  // Load the native almost anitag UI
-  setTimeout(() => {
-    mainWindow.loadURL(`http://localhost:${SERVER_PORT}/`);
-  }, 800);
+  // Resiliently poll streaming engine health before loading the UI
+  pollServerUntilReady(SERVER_PORT, () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.loadURL(`http://localhost:${SERVER_PORT}/`);
+    }
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
