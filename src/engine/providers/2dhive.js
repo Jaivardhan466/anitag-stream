@@ -1,7 +1,25 @@
 import { getMedia } from "../core/anilist.js";
 import { episodeMeta, expectedCount, json } from "../core/new-provider-utils.js";
 
+const CATALOG_MAL_MAP = {
+  21: 21,         // One Piece
+  151807: 52299,  // Solo Leveling
+  97940: 34572,   // Black Clover
+  159322: 56784,  // Bleach TYBW
+  161645: 54492,  // The Apothecary Diaries
+  146065: 51179,  // Mushoku Tensei
+  163134: 54857,  // Re:ZERO
+  156822: 53580,  // That Time I Got Reincarnated as a Slime
+  170942: 57181,  // Blue Box
+  179955: 59452,  // Master Swordsman II
+  162804: 55973,  // Smoking Supermarket
+  166216: 56524   // Though I Am an Inept Villainess
+};
+
 async function getMalId(anilistId, ctx) {
+  if (ctx?.malId) return Number(ctx.malId);
+  const idNum = Number(anilistId);
+  if (CATALOG_MAL_MAP[idNum]) return CATALOG_MAL_MAP[idNum];
   const idMal = ctx?.media?.idMal ?? (await getMedia(anilistId)).idMal;
   if (!idMal) throw new Error(`2dhive: no MAL ID found for AniList ${anilistId}`);
   return idMal;
@@ -11,9 +29,15 @@ const BASE = "https://2dhive.com";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 async function fetchPage(url) {
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error(`2dhive ${res.status}: ${url}`);
-  return res.text();
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA }, signal: ctrl.signal });
+    if (!res.ok) throw new Error(`2dhive ${res.status}: ${url}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 function extractPlayerProps(html) {
@@ -132,8 +156,8 @@ export async function getEpisodes(anilistId, ctx = {}) {
   };
 }
 
-async function handleWatch(anilistId, audio, epNum) {
-  const malId = await getMalId(anilistId);
+async function handleWatch(anilistId, audio, epNum, ctx = {}) {
+  const malId = await getMalId(anilistId, ctx);
   const referer = `${BASE}/episode?anime=${malId}&ep_num=${epNum}`;
 
   const [propsResult, hiAnimeResult, dlContent] = await Promise.allSettled([
@@ -209,10 +233,20 @@ async function handleWatch(anilistId, audio, epNum) {
     }
   }
 
-  if (!streams.some((s) => s.url === `https://megaplay.buzz/stream/mal/${malId}/${epNum}/${audio === "dub" ? "dub" : "sub"}`)) {
+  const subOrDub = audio === "dub" ? "dub" : "sub";
+  const upperAudio = subOrDub.toUpperCase();
+  if (!streams.some((s) => s.url === `https://babastream.top/embed/${malId}/${epNum}/${subOrDub}`)) {
     streams.push({
-      server: audio === "dub" ? "MegaPlay Dub" : "MegaPlay Sub",
-      url: `https://megaplay.buzz/stream/mal/${malId}/${epNum}/${audio === "dub" ? "dub" : "sub"}`,
+      server: `BabaStream (${upperAudio})`,
+      url: `https://babastream.top/embed/${malId}/${epNum}/${subOrDub}`,
+      type: "embed",
+    });
+  }
+
+  if (!streams.some((s) => s.url === `https://megaplay.buzz/stream/mal/${malId}/${epNum}/${subOrDub}`)) {
+    streams.push({
+      server: `MegaPlay (${upperAudio})`,
+      url: `https://megaplay.buzz/stream/mal/${malId}/${epNum}/${subOrDub}`,
       type: "embed",
     });
   }
@@ -243,12 +277,15 @@ async function handleWatch(anilistId, audio, epNum) {
 
 async function fetchDownloadHls(malId, audio, epNum) {
   const fileKey = `${malId}_${epNum}_${audio}`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 2000);
   try {
     const res = await fetch(`${BASE}/download?file=${encodeURIComponent(fileKey)}`, {
       headers: {
         "User-Agent": UA,
         "Referer": `${BASE}/episode?anime=${malId}&ep_num=${epNum}`,
       },
+      signal: ctrl.signal
     });
     if (!res.ok) return null;
     const html = await res.text();
@@ -258,18 +295,25 @@ async function fetchDownloadHls(malId, audio, epNum) {
     return payload.hlsContent || null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
 async function fetchHiAnimeHls(malId, epNum, referer) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 2000);
   try {
     const res = await fetch(`${BASE}/api/hianime?mal_id=${malId}&ep_num=${epNum}`, {
       headers: { "User-Agent": UA, "Referer": referer },
+      signal: ctrl.signal
     });
     if (!res.ok) return null;
-    return res.json().catch(() => null);
+    return await res.json().catch(() => null);
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -367,7 +411,10 @@ export default {
     const path = url.pathname;
     try {
       let m = path.match(/^\/watch\/2dhive\/(\d+)\/(sub|dub)\/2dhive-(\d+)\/?$/);
-      if (m) return await handleWatch(m[1], m[2], m[3]);
+      if (m) {
+        const malIdParam = url.searchParams.get("malId");
+        return await handleWatch(m[1], m[2], m[3], { malId: malIdParam ? Number(malIdParam) : undefined });
+      }
 
       m = path.match(/^\/stream\/2dhive\/(\d+)\/(sub|dub)\/(\d+)\/?$/);
       if (m) return await handleStream(m[1], m[2], m[3]);

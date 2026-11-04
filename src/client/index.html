@@ -1283,8 +1283,14 @@
 
               <!-- Anivexa Multi-Provider Server Selector (Anikoto / AnimeGG / AniBD / 2DHiVE / Mkissa / VidLink) -->
               <div class="flex flex-wrap items-center kage-pill rounded-full p-0.5 text-xs gap-0.5">
-                <button data-server="animegg" class="server-pill-btn px-3 py-1 rounded-full font-bold accent-fill transition-all flex items-center gap-1.5" title="AnimeGG Fast Stream Server">
+                <button data-server="2dhive" class="server-pill-btn px-3 py-1 rounded-full font-bold accent-fill transition-all flex items-center gap-1.5" title="2DHiVE Fast Multi-Server Stream">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  <span>2DHiVE</span>
+                </button>
+                <button data-server="vidlink" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="VidLink / Miruro Cloud HD Server">
+                  <span>VidLink HD</span>
+                </button>
+                <button data-server="animegg" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="AnimeGG Stream Server">
                   <span>AnimeGG</span>
                 </button>
                 <button data-server="anikoto" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="Anikoto Official API (Ad-Blocked Sub/Dub Stream)">
@@ -1293,14 +1299,8 @@
                 <button data-server="anibd" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="AniBD Direct HLS/MP4 Server">
                   <span>AniBD</span>
                 </button>
-                <button data-server="2dhive" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="2DHiVE Multi-Server Stream">
-                  <span>2DHiVE</span>
-                </button>
                 <button data-server="mkissa" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="Mkissa Direct HLS Server">
                   <span>Mkissa</span>
-                </button>
-                <button data-server="vidlink" class="server-pill-btn px-2.5 py-1 rounded-full font-medium text-neutral-400 hover:text-white transition-all flex items-center gap-1" title="VidLink / Miruro Cloud HD Server">
-                  <span>VidLink HD</span>
                 </button>
               </div>
 
@@ -4293,7 +4293,7 @@
     let activeStreamIndex = 0;
     let streamStallTimeout = null;
     let currentLoadToken = 0;
-    state.activeServer = 'animegg';
+    state.activeServer = '2dhive';
 
     function setBufferingUI(isBuffering, statusText = 'Loading Ad-Free HD Stream...') {
       const overlay = document.getElementById('videoBufferingOverlay');
@@ -4369,37 +4369,38 @@
     // Verified Full-Episode Cloud Players (Sandboxed & Ad-Blocked — Zero 90-second opening clips)
     function getVerifiedFullEpisodeEmbeds(anime, episodeNum, preferredProvider = 'animegg') {
       const ext = getAnimeExtras(anime);
-      const malId = state.activeSeasonMalId || ext.malId || 21;
-      const anilistId = state.activeSeasonAnilistId || ext.anilistId || 21;
+      const malId = state.activeSeasonMalId || ext.malId;
+      if (!malId || Number(malId) <= 0) return [];
+      const anilistId = state.activeSeasonAnilistId || ext.anilistId || 0;
       const subOrDub = state.audioMode === 'DUB' ? 'dub' : 'sub';
       const upperMode = subOrDub.toUpperCase();
 
-      const vidLinkSource = {
-        server: `VidLink Cloud HD (${upperMode})`,
+      const babaStreamSource = {
+        server: `BabaStream Cloud (${upperMode})`,
         type: 'embed',
-        url: `https://vidlink.pro/anime/${malId}/${episodeNum}/${subOrDub}?fallback=true&autoplay=true&primaryColor=E8C36A`
+        url: `https://babastream.top/embed/${malId}/${episodeNum}/${subOrDub}`
       };
       const megaPlaySource = {
         server: `MegaPlay HD (${upperMode})`,
         type: 'embed',
         url: `https://megaplay.buzz/stream/mal/${malId}/${episodeNum}/${subOrDub}`
       };
-      const babaStreamSource = {
-        server: `BabaStream Cloud (${upperMode})`,
+      const vidLinkSource = {
+        server: `VidLink Cloud HD (${upperMode})`,
         type: 'embed',
-        url: `https://babastream.top/embed/${malId}/${episodeNum}/${subOrDub}`
+        url: `https://vidlink.pro/anime/${malId}/${episodeNum}/${subOrDub}?fallback=true&autoplay=true&primaryColor=E8C36A`
       };
 
       const providerOrderMap = {
-        vidlink: [vidLinkSource, megaPlaySource, babaStreamSource],
-        animegg: [vidLinkSource, megaPlaySource, babaStreamSource],
-        anikoto: [vidLinkSource, megaPlaySource, babaStreamSource],
-        '2dhive': [babaStreamSource, vidLinkSource, megaPlaySource],
-        anibd: [vidLinkSource, megaPlaySource, babaStreamSource],
-        mkissa: [vidLinkSource, megaPlaySource, babaStreamSource]
+        '2dhive': [babaStreamSource, megaPlaySource, vidLinkSource],
+        vidlink: [vidLinkSource, babaStreamSource, megaPlaySource],
+        animegg: [babaStreamSource, megaPlaySource, vidLinkSource],
+        anikoto: [babaStreamSource, megaPlaySource, vidLinkSource],
+        anibd: [babaStreamSource, megaPlaySource, vidLinkSource],
+        mkissa: [babaStreamSource, megaPlaySource, vidLinkSource]
       };
 
-      const ordered = providerOrderMap[preferredProvider] || [vidLinkSource, megaPlaySource, babaStreamSource];
+      const ordered = providerOrderMap[preferredProvider] || [babaStreamSource, megaPlaySource, vidLinkSource];
       const list = [...ordered];
 
       // Only add Archive.org 24m Direct MP4 when watching Black Clover episodes 52..170 (where exact full episodes exist)
@@ -4555,10 +4556,10 @@
       updateTimelineUI();
 
       const ext = getAnimeExtras(anime);
-      const anilistId = state.activeSeasonAnilistId || ext.anilistId || 21;
-      const malId = state.activeSeasonMalId || ext.malId || 21;
+      const anilistId = state.activeSeasonAnilistId || ext.anilistId || 0;
+      const malId = state.activeSeasonMalId || ext.malId || 0;
       const audioLower = state.audioMode.toLowerCase();
-      const provider = (state.activeServer || 'animegg').toLowerCase();
+      const provider = (state.activeServer || '2dhive').toLowerCase();
 
       const verifiedFallbacks = getVerifiedFullEpisodeEmbeds(anime, episodeNum, provider);
 
